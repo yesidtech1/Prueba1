@@ -1,55 +1,126 @@
-import { DeployButton } from "@/components/deploy-button";
-import { EnvVarWarning } from "@/components/env-var-warning";
-import { AuthButton } from "@/components/auth-button";
-import { ThemeSwitcher } from "@/components/theme-switcher";
-import { hasEnvVars } from "@/lib/utils";
-import Link from "next/link";
-import { Suspense } from "react";
+"use client";
 
-export default function ProtectedLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ArrowRight, FileText } from "lucide-react";
+import { useRouter } from "next/navigation";
+
+export default function SignUpSuccessPage() {
+  const router = useRouter();
+
+  const formularios = [
+    {
+      numero: "Formulario 1",
+      titulo: "Formulario Uno",
+      descripcion: "Accede al primer formulario",
+      href: "/formulario-1",
+    },
+    {
+      numero: "Formulario 2",
+      titulo: "Formulario Dos",
+      descripcion: "Accede al segundo formulario",
+      href: "/formulario-2",
+    },
+    {
+      numero: "Formulario 3",
+      titulo: "Formulario Tres",
+      descripcion: "Accede al tercer formulario",
+      href: "/formulario-3",
+    },
+    {
+      numero: "Formulario 4",
+      titulo: "Formulario Cuatro",
+      descripcion: "Accede al cuarto formulario",
+      href: "/formulario-4",
+    },
+  ];
+
   return (
-    <main className="min-h-screen flex flex-col items-center">
-      <div className="flex-1 w-full flex flex-col gap-20 items-center">
-        <nav className="w-full flex justify-center border-b border-b-foreground/10 h-16">
-          <div className="w-full max-w-5xl flex justify-between items-center p-3 px-5 text-sm">
-            <div className="flex gap-5 items-center font-semibold">
-              <Link href={"/"}>Next.js Supabase Starter</Link>
-              <div className="flex items-center gap-2">
-                <DeployButton />
-              </div>
-            </div>
-            {!hasEnvVars ? (
-              <EnvVarWarning />
-            ) : (
-              <Suspense>
-                <AuthButton />
-              </Suspense>
-            )}
+    <div className="min-h-svh bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-6">
+      <div className="w-full max-w-4xl">
+
+        {/* Mensaje de éxito */}
+        <div className="text-center mb-12">
+          <div className="mx-auto w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="w-14 h-14 text-green-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
           </div>
-        </nav>
-        <div className="flex-1 flex flex-col gap-20 max-w-5xl p-5">
-          {children}
+
+          <h1 className="text-4xl font-bold text-gray-900 mb-3">
+            ¡Registro completado!
+          </h1>
+          <p className="text-xl text-gray-600">
+            Selecciona a qué formulario deseas acceder
+          </p>
         </div>
 
-        <footer className="w-full flex items-center justify-center border-t mx-auto text-center text-xs gap-8 py-16">
-          <p>
-            Powered by{" "}
-            <a
-              href="https://supabase.com/?utm_source=create-next-app&utm_medium=template&utm_term=nextjs"
-              target="_blank"
-              className="font-bold hover:underline"
-              rel="noreferrer"
+        {/* Tarjetas */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {formularios.map((form, index) => (
+            <Card
+              key={index}
+              className="group hover:shadow-xl transition-all duration-300 hover:-translate-y-2 border border-gray-200 hover:border-primary/30"
             >
-              Supabase
-            </a>
-          </p>
-          <ThemeSwitcher />
-        </footer>
+              <CardHeader>
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 mt-1">
+                    <FileText className="w-6 h-6 text-primary" />
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-primary">
+                      {form.numero}
+                    </p>
+                    <CardTitle className="text-2xl">
+                      {form.titulo}
+                    </CardTitle>
+                    <CardDescription className="text-base">
+                      {form.descripcion}
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+
+              <CardContent>
+                <Button
+                  onClick={() => {
+                    const url = window.location.origin + form.href;
+                    console.log("Ir a:", url);
+                    router.push(url);
+                  }}
+                  className="w-full text-base py-6 flex items-center justify-center gap-2 group-hover:bg-primary transition-all"
+                  size="lg"
+                >
+                  Abrir Formulario
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        <p className="text-center text-sm text-gray-500 mt-10">
+          Elige uno de los formularios para continuar
+        </p>
       </div>
-    </main>
+    </div>
   );
 }

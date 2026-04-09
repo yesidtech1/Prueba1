@@ -1,5 +1,9 @@
 "use client";
 
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -12,45 +16,101 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
-export function SignUpForm({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [repeatPassword, setRepeatPassword] = useState("");
+export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutRef<"div">) {
+  const router = useRouter();
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    documentType: "",
+    documentNumber: "",
+    phone: "",
+    password: "",
+    repeatPassword: "",
+  });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
 
+  // Manejo de cambios en inputs
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  // Manejo de cambios en select
+  const handleSelectChange = (value: string) => {
+    setFormData({ ...formData, documentType: value });
+  };
+
+  // Función principal para crear cuenta
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     const supabase = createClient();
     setIsLoading(true);
     setError(null);
 
-    if (password !== repeatPassword) {
-      setError("Passwords do not match");
+    // Validaciones básicas
+    if (formData.password !== formData.repeatPassword) {
+      setError("Las contraseñas no coinciden");
+      setIsLoading(false);
+      return;
+    }
+
+    if (!formData.firstName || !formData.lastName || !formData.documentType || !formData.documentNumber || !formData.phone) {
+      setError("Por favor completa todos los campos obligatorios");
       setIsLoading(false);
       return;
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
+      // 1️⃣ Crear el usuario en Supabase (Phone Auth)
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        phone: formData.phone,
+        password: formData.password,
         options: {
-          emailRedirectTo: `${window.location.origin}/protected`,
+          data: {
+            first_name: formData.firstName,
+            last_name: formData.lastName,
+            document_type: formData.documentType,
+            document_number: formData.documentNumber,
+            phone: formData.phone,
+          },
         },
       });
-      if (error) throw error;
+
+      if (signUpError) throw signUpError;
+
+      // 2️⃣ Guardar perfil en la tabla "profiles" usando upsert para evitar errores de clave duplicada
+      if (data.user) {
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .upsert(
+            {
+              id: data.user.id,
+              first_name: formData.firstName,
+              last_name: formData.lastName,
+              document_type: formData.documentType,
+              document_number: formData.documentNumber,
+              phone: formData.phone,
+            },
+            { onConflict: "id" } // Actualiza si ya existe
+          );
+
+        if (profileError) {
+          console.error("Error al guardar perfil:", profileError);
+        }
+      }
+
+      // 3️⃣ Redirigir al usuario
       router.push("/auth/sign-up-success");
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+      setError(error instanceof Error ? error.message : "Ocurrió un error al crear la cuenta");
     } finally {
       setIsLoading(false);
     }
@@ -60,57 +120,73 @@ export function SignUpForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">Sign up</CardTitle>
-          <CardDescription>Create a new account</CardDescription>
+          <CardTitle className="text-2xl">Crear cuenta</CardTitle>
+          <CardDescription>Regístrate usando tu número de teléfono</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignUp}>
             <div className="flex flex-col gap-6">
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="m@example.com"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
+              {/* Nombre y Apellido */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="firstName">Nombre <span className="text-red-500">*</span></Label>
+                  <Input id="firstName" name="firstName" type="text" placeholder="Juan" required value={formData.firstName} onChange={handleChange} />
                 </div>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+                <div className="grid gap-2">
+                  <Label htmlFor="lastName">Apellido <span className="text-red-500">*</span></Label>
+                  <Input id="lastName" name="lastName" type="text" placeholder="Pérez" required value={formData.lastName} onChange={handleChange} />
+                </div>
+              </div>
+
+              {/* Tipo y número de documento */}
+              <div className="grid gap-2">
+                <Label htmlFor="documentType">Tipo de documento <span className="text-red-500">*</span></Label>
+                <Select onValueChange={handleSelectChange} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecciona tipo de documento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="CC">Cédula de Ciudadanía (CC)</SelectItem>
+                    <SelectItem value="CE">Cédula de Extranjería (CE)</SelectItem>
+                    <SelectItem value="PASAPORTE">Pasaporte</SelectItem>
+                    <SelectItem value="TI">Tarjeta de Identidad (TI)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="repeat-password">Repeat Password</Label>
-                </div>
-                <Input
-                  id="repeat-password"
-                  type="password"
-                  required
-                  value={repeatPassword}
-                  onChange={(e) => setRepeatPassword(e.target.value)}
-                />
+                <Label htmlFor="documentNumber">Número de documento <span className="text-red-500">*</span></Label>
+                <Input id="documentNumber" name="documentNumber" type="text" placeholder="1234567890" required value={formData.documentNumber} onChange={handleChange} />
               </div>
+
+              {/* Teléfono */}
+              <div className="grid gap-2">
+                <Label htmlFor="phone">Teléfono <span className="text-red-500">*</span></Label>
+                <Input id="phone" name="phone" type="tel" placeholder="+57 322 6234939" required value={formData.phone} onChange={handleChange} />
+              </div>
+
+              {/* Contraseña */}
+              <div className="grid gap-2">
+                <Label htmlFor="password">Contraseña <span className="text-red-500">*</span></Label>
+                <Input id="password" name="password" type="password" required value={formData.password} onChange={handleChange} />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="repeatPassword">Repetir contraseña <span className="text-red-500">*</span></Label>
+                <Input id="repeatPassword" name="repeatPassword" type="password" required value={formData.repeatPassword} onChange={handleChange} />
+              </div>
+
+              {/* Mensaje de error */}
               {error && <p className="text-sm text-red-500">{error}</p>}
+
+              {/* Botón */}
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Creating an account..." : "Sign up"}
+                {isLoading ? "Creando cuenta..." : "Crear cuenta"}
               </Button>
             </div>
+
+            {/* Link para iniciar sesión */}
             <div className="mt-4 text-center text-sm">
-              Already have an account?{" "}
-              <Link href="/auth/login" className="underline underline-offset-4">
-                Login
-              </Link>
+              ¿Ya tienes una cuenta?{" "}
+              <Link href="/auth/verify" className="underline underline-offset-4">Iniciar sesión</Link>
             </div>
           </form>
         </CardContent>
