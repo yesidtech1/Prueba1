@@ -38,24 +38,20 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Manejo de cambios en inputs
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Manejo de cambios en select
   const handleSelectChange = (value: string) => {
     setFormData({ ...formData, documentType: value });
   };
 
-  // Función principal para crear cuenta
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     const supabase = createClient();
     setIsLoading(true);
     setError(null);
 
-    // Validaciones básicas
     if (formData.password !== formData.repeatPassword) {
       setError("Las contraseñas no coinciden");
       setIsLoading(false);

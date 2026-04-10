@@ -45,7 +45,6 @@ export default function SignUpSuccessPage() {
     <div className="min-h-svh bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center p-6">
       <div className="w-full max-w-4xl">
         
-        {/* Mensaje de éxito */}
         <div className="text-center mb-12">
           <div className="mx-auto w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6">
             <svg
@@ -72,7 +71,6 @@ export default function SignUpSuccessPage() {
           </p>
         </div>
 
-        {/* Tarjetas */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {formularios.map((form, index) => (
             <Card
