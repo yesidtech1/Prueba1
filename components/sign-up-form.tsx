@@ -24,17 +24,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutRef<"div">) {
+export function SignUpForm({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<"div">) {
   const router = useRouter();
+  const supabase = createClient();
+
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
     documentType: "",
     documentNumber: "",
-    phone: "",
+    email: "",
     password: "",
     repeatPassword: "",
   });
+
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -48,26 +54,30 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
-    setIsLoading(true);
-    setError(null);
 
     if (formData.password !== formData.repeatPassword) {
       setError("Las contraseñas no coinciden");
-      setIsLoading(false);
       return;
     }
 
-    if (!formData.firstName || !formData.lastName || !formData.documentType || !formData.documentNumber || !formData.phone) {
+    if (
+      !formData.firstName ||
+      !formData.lastName ||
+      !formData.documentType ||
+      !formData.documentNumber ||
+      !formData.email 
+    ) {
       setError("Por favor completa todos los campos obligatorios");
-      setIsLoading(false);
       return;
     }
+
+    setIsLoading(true);
+    setError(null);
 
     try {
-      // 1️⃣ Crear el usuario en Supabase (Phone Auth)
+      // 🔐 Registro con email
       const { data, error: signUpError } = await supabase.auth.signUp({
-        phone: formData.phone,
+        email: formData.email.trim().toLowerCase(),
         password: formData.password,
         options: {
           data: {
@@ -75,14 +85,13 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
             last_name: formData.lastName,
             document_type: formData.documentType,
             document_number: formData.documentNumber,
-            phone: formData.phone,
           },
         },
       });
 
       if (signUpError) throw signUpError;
 
-      // 2️⃣ Guardar perfil en la tabla "profiles" usando upsert para evitar errores de clave duplicada
+      // 📦 Guardar perfil
       if (data.user) {
         const { error: profileError } = await supabase
           .from("profiles")
@@ -93,9 +102,9 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
               last_name: formData.lastName,
               document_type: formData.documentType,
               document_number: formData.documentNumber,
-              phone: formData.phone,
+              email: formData.email,
             },
-            { onConflict: "id" } // Actualiza si ya existe
+            { onConflict: "id" }
           );
 
         if (profileError) {
@@ -103,10 +112,14 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
         }
       }
 
-      // 3️⃣ Redirigir al usuario
       router.push("/auth/sign-up-success");
+
     } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "Ocurrió un error al crear la cuenta");
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Ocurrió un error al crear la cuenta"
+      );
     } finally {
       setIsLoading(false);
     }
@@ -117,76 +130,126 @@ export function SignUpForm({ className, ...props }: React.ComponentPropsWithoutR
       <Card>
         <CardHeader>
           <CardTitle className="text-2xl">Crear cuenta</CardTitle>
-          <CardDescription>Regístrate usando tu número de teléfono</CardDescription>
+          <CardDescription>
+            Regístrate con tu correo electrónico
+          </CardDescription>
         </CardHeader>
+
         <CardContent>
           <form onSubmit={handleSignUp}>
             <div className="flex flex-col gap-6">
+
               {/* Nombre y Apellido */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="firstName">Nombre <span className="text-red-500">*</span></Label>
-                  <Input id="firstName" name="firstName" type="text" placeholder="Juan" required value={formData.firstName} onChange={handleChange} />
+                  <Label>Nombre *</Label>
+                  <Input
+                    name="firstName"
+                    placeholder="Juan"
+                    value={formData.firstName}
+                    onChange={handleChange}
+                    required
+                  />
                 </div>
+
                 <div className="grid gap-2">
-                  <Label htmlFor="lastName">Apellido <span className="text-red-500">*</span></Label>
-                  <Input id="lastName" name="lastName" type="text" placeholder="Pérez" required value={formData.lastName} onChange={handleChange} />
+                  <Label>Apellido *</Label>
+                  <Input
+                    name="lastName"
+                    placeholder="Pérez"
+                    value={formData.lastName}
+                    onChange={handleChange}
+                    required
+                  />
                 </div>
               </div>
 
-              {/* Tipo y número de documento */}
+              {/* Documento */}
               <div className="grid gap-2">
-                <Label htmlFor="documentType">Tipo de documento <span className="text-red-500">*</span></Label>
-                <Select onValueChange={handleSelectChange} required>
+                <Label>Tipo de documento *</Label>
+                <Select onValueChange={handleSelectChange}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecciona tipo de documento" />
+                    <SelectValue placeholder="Selecciona tipo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="CC">Cédula de Ciudadanía (CC)</SelectItem>
-                    <SelectItem value="CE">Cédula de Extranjería (CE)</SelectItem>
+                    <SelectItem value="CC">Cédula (CC)</SelectItem>
+                    <SelectItem value="CE">Extranjería (CE)</SelectItem>
                     <SelectItem value="PASAPORTE">Pasaporte</SelectItem>
-                    <SelectItem value="TI">Tarjeta de Identidad (TI)</SelectItem>
+                    <SelectItem value="TI">Tarjeta (TI)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="grid gap-2">
-                <Label htmlFor="documentNumber">Número de documento <span className="text-red-500">*</span></Label>
-                <Input id="documentNumber" name="documentNumber" type="text" placeholder="1234567890" required value={formData.documentNumber} onChange={handleChange} />
+                <Label>Número de documento *</Label>
+                <Input
+                  name="documentNumber"
+                  placeholder="1234567890"
+                  value={formData.documentNumber}
+                  onChange={handleChange}
+                  required
+                />
               </div>
 
-              {/* Teléfono */}
+              {/* 📧 EMAIL (principal ahora) */}
               <div className="grid gap-2">
-                <Label htmlFor="phone">Teléfono <span className="text-red-500">*</span></Label>
-                <Input id="phone" name="phone" type="tel" placeholder="+57 322 6234939" required value={formData.phone} onChange={handleChange} />
+                <Label>Correo *</Label>
+                <Input
+                  name="email"
+                  type="email"
+                  placeholder="tuemail@gmail.com"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                />
               </div>
 
-              {/* Contraseña */}
+              {/* 🔒 Password */}
               <div className="grid gap-2">
-                <Label htmlFor="password">Contraseña <span className="text-red-500">*</span></Label>
-                <Input id="password" name="password" type="password" required value={formData.password} onChange={handleChange} />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="repeatPassword">Repetir contraseña <span className="text-red-500">*</span></Label>
-                <Input id="repeatPassword" name="repeatPassword" type="password" required value={formData.repeatPassword} onChange={handleChange} />
+                <Label>Contraseña *</Label>
+                <Input
+                  name="password"
+                  type="password"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                />
               </div>
 
-              {/* Mensaje de error */}
-              {error && <p className="text-sm text-red-500">{error}</p>}
+              <div className="grid gap-2">
+                <Label>Repetir contraseña *</Label>
+                <Input
+                  name="repeatPassword"
+                  type="password"
+                  value={formData.repeatPassword}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+
+              {/* Error */}
+              {error && (
+                <p className="text-sm text-red-500">{error}</p>
+              )}
 
               {/* Botón */}
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              <Button type="submit" disabled={isLoading}>
                 {isLoading ? "Creando cuenta..." : "Crear cuenta"}
               </Button>
             </div>
 
-            {/* Link para iniciar sesión */}
+            {/* Login */}
             <div className="mt-4 text-center text-sm">
               ¿Ya tienes una cuenta?{" "}
-              <Link href="/auth/verify" className="underline underline-offset-4">Iniciar sesión</Link>
+              <Link href="/auth/login" className="underline">
+                Iniciar sesión
+              </Link>
             </div>
+
           </form>
         </CardContent>
       </Card>
     </div>
   );
 }
+
