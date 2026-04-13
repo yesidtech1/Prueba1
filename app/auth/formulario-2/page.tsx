@@ -10,7 +10,8 @@ interface FormData {
   pff3: string;
   pff4: string;
   pff5: string;
-  [key: string]: string;
+  current_step?: number;
+  [key: string]: string | number | undefined;
 }
 
 const supabase = createClient();
@@ -19,8 +20,13 @@ const EncuestaFamiliar: React.FC = () => {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
+  
   const [formData, setFormData] = useState<FormData>({
-    pff1: '', pff2: '', pff3: '', pff4: '', pff5: '',
+    pff1: '', 
+    pff2: '', 
+    pff3: '', 
+    pff4: '', 
+    pff5: '',
   });
 
   // --- LÓGICA DE RECUPERACIÓN DE PROGRESO ---
@@ -38,17 +44,16 @@ const EncuestaFamiliar: React.FC = () => {
         .eq('user_id', user.id)
         .single();
 
-      // Redirección si ya va mucho más adelante (opcional)
-      if (data && data.current_step > 2) {
-        // Podrías dejar que edite, o mandarlo directo al paso actual:
-        // router.push(`/auth/formulario-${data.current_step}`);
-      }
-
       if (data) {
-        const savedData: any = {};
-        Object.keys(formData).forEach(key => {
-          if (data[key]) savedData[key] = String(data[key]);
+        const savedData: Partial<FormData> = {};
+
+        // Corrección principal aquí
+        (['pff1', 'pff2', 'pff3', 'pff4', 'pff5'] as const).forEach((key) => {
+          if (data[key] !== null && data[key] !== undefined) {
+            savedData[key] = String(data[key]);
+          }
         });
+
         setFormData(prev => ({ ...prev, ...savedData }));
       }
       
@@ -92,8 +97,8 @@ const EncuestaFamiliar: React.FC = () => {
         .upsert({
           user_id: user.id,
           ...formData,
-          current_step: 3, // 👈 Marcamos que la siguiente es la 3
-          updated_at: new Date(),
+          current_step: 3,
+          updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
 
       if (error) throw error;
