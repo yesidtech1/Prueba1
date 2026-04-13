@@ -23,7 +23,6 @@ const EncuestaPlutchick: React.FC = () => {
     eplut11: '', eplut12: '', eplut13: '', eplut14: '', eplut15: '',
   });
 
-  // --- LÓGICA DE RECUPERACIÓN ---
   useEffect(() => {
     const checkProgress = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -39,7 +38,9 @@ const EncuestaPlutchick: React.FC = () => {
         const savedData: any = {};
         Object.keys(formData).forEach(key => {
           const dbKey = key.toLowerCase();
-          if (data[dbKey]) savedData[key] = String(data[dbKey]);
+          if (data[dbKey] !== null && data[dbKey] !== undefined) {
+            savedData[key] = String(data[dbKey]);
+          }
         });
         setFormData(prev => ({ ...prev, ...savedData }));
       }
@@ -61,6 +62,15 @@ const EncuestaPlutchick: React.FC = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No hay sesión de usuario");
 
+      const { data: currentRecord } = await supabase
+        .from('encuestas')
+        .select('current_step')
+        .eq('user_id', user.id)
+        .single();
+
+      const nextStep = 7;
+      const stepToSave = Math.max(currentRecord?.current_step || 0, nextStep);
+
       const dataToSave = Object.keys(formData).reduce((acc, key) => {
         acc[key.toLowerCase()] = formData[key];
         return acc;
@@ -71,17 +81,15 @@ const EncuestaPlutchick: React.FC = () => {
         .upsert({
           user_id: user.id,
           ...dataToSave,
-          current_step: 7, // Siguiente paso
-          updated_at: new Date(),
+          current_step: stepToSave,
+          updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
 
       if (error) throw error;
-      router.push('/auth/formulario-7');
+      router.push('/auth/formularios/formulario-7');
 
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : "Error desconocido";
-      console.error('Error al guardar:', errorMessage);
-      alert('Hubo un problema al guardar tus respuestas.');
+    } catch (error: any) {
+      alert('Error al guardar: ' + error.message);
     } finally {
       setLoading(false);
     }
@@ -105,68 +113,72 @@ const EncuestaPlutchick: React.FC = () => {
     { id: 'eplut15', text: '¿Ha intentado alguna vez quitarse la vida?' },
   ];
 
-  if (isChecking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
-      </div>
-    );
-  }
+  if (isChecking) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4 pb-32">
       <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-md mb-4">
-            <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center text-white text-2xl">⚠️</div>
-            <h1 className="text-3xl font-bold text-gray-800">Escala de Plutchick</h1>
+        
+        {/* === BARRA DE PROGRESO (54% para Sección 6) === */}
+        <div className="mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm font-bold text-red-600 uppercase tracking-wider font-mono">Estado de Evaluación</span>
+            <span className="text-sm font-bold text-gray-500">54%</span>
           </div>
-          <p className="text-gray-600 text-lg">Sección 6 de 11 • Evaluación de Riesgo Suicida</p>
+          <div className="w-full bg-gray-100 h-3 rounded-full overflow-hidden">
+            <div 
+              className="bg-gradient-to-r from-red-500 to-rose-500 h-full transition-all duration-1000 ease-out"
+              style={{ width: '54%' }}
+            ></div>
+          </div>
+          <p className="text-xs text-gray-400 mt-2 text-right font-medium">Sección 6 de 11 • Plutchick</p>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
-          <div className="w-full bg-gray-100 h-2">
-            <div className="bg-red-600 h-2 w-[54%] transition-all duration-500"></div>
-          </div>
-          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-8 py-6">
-            <h2 className="text-white text-2xl font-semibold">6. Escala de Plutchick</h2>
-            <p className="text-rose-100 mt-1">Responda Sí o No según corresponda</p>
+        <div className="bg-white rounded-3xl shadow-xl overflow-hidden mb-10">
+          <div className="bg-gradient-to-r from-red-600 to-rose-600 px-8 py-6 text-white text-center">
+            <h2 className="text-2xl font-bold uppercase tracking-tight">6. Escala de Plutchick</h2>
+            <p className="text-rose-100 text-sm mt-1 opacity-90">Responde con total sinceridad. Esta información es confidencial.</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-8 space-y-8">
+          <form onSubmit={handleSubmit} className="p-8 space-y-6">
             {questions.map((q, index) => (
-              <div key={q.id} className="flex flex-col md:flex-row md:items-center gap-6 p-6 bg-gray-50 rounded-2xl border border-gray-100 hover:border-gray-200 transition-all">
-                <p className="flex-1 text-lg text-gray-800 leading-relaxed">
-                  {index + 1}. {q.text}
+              <div key={q.id} className="flex flex-col md:flex-row md:items-center gap-6 p-6 bg-gray-50/50 rounded-2xl border border-gray-100 hover:bg-white hover:shadow-md transition-all duration-300">
+                <p className="flex-1 text-lg font-medium text-gray-800 leading-tight">
+                  <span className="text-red-500 font-bold mr-2">{index + 1}.</span> {q.text}
                 </p>
-                <div className="flex gap-4">
-                  <label className={`flex-1 md:flex-none px-8 py-4 rounded-2xl border-2 cursor-pointer transition-all text-center font-medium ${
-                    formData[q.id] === '1' ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-200 hover:border-gray-300'
+                <div className="flex gap-3">
+                  <label className={`flex-1 md:flex-none px-10 py-3 rounded-xl border-2 cursor-pointer transition-all text-center font-bold ${
+                    formData[q.id] === '1' ? 'border-red-600 bg-red-600 text-white shadow-lg' : 'border-gray-200 bg-white text-gray-400 hover:border-red-200'
                   }`}>
                     <input type="radio" name={q.id} value="1" checked={formData[q.id] === '1'} onChange={handleChange} className="hidden" required />
-                    Sí
+                    SÍ
                   </label>
-                  <label className={`flex-1 md:flex-none px-8 py-4 rounded-2xl border-2 cursor-pointer transition-all text-center font-medium ${
-                    formData[q.id] === '2' ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-gray-200 hover:border-gray-300'
+                  <label className={`flex-1 md:flex-none px-10 py-3 rounded-xl border-2 cursor-pointer transition-all text-center font-bold ${
+                    formData[q.id] === '2' ? 'border-emerald-600 bg-emerald-600 text-white shadow-lg' : 'border-gray-200 bg-white text-gray-400 hover:border-emerald-200'
                   }`}>
                     <input type="radio" name={q.id} value="2" checked={formData[q.id] === '2'} onChange={handleChange} className="hidden" />
-                    No
+                    NO
                   </label>
                 </div>
               </div>
             ))}
 
-            <div className="pt-8">
+            <div className="pt-6">
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 disabled:opacity-70 text-white font-semibold py-4 rounded-2xl text-lg shadow-lg shadow-red-500/30 transition-all duration-200"
+                className="w-full bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-bold py-5 rounded-2xl text-xl shadow-xl shadow-red-200 transition-all active:scale-[0.98] disabled:opacity-50"
               >
-                {loading ? 'Guardando respuestas...' : 'Guardar y Continuar →'}
+                {loading ? 'Guardando...' : 'Guardar y Continuar →'}
               </button>
             </div>
           </form>
         </div>
+        <p className="text-center text-gray-400 text-xs uppercase tracking-widest">Fin de la sección 6</p>
       </div>
     </div>
   );

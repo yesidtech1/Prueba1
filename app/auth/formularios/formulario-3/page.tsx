@@ -5,14 +5,6 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 
 interface FormData {
-  pcsM1: string; pcsM2: string; pcsM3: string; pcsM4: string; pcsM5: string;
-  pcsM6: string; pcsM7: string; pcsM8: string; pcsM9: string; pcsM10: string;
-  pcsM11: string; pcsM12: string; pcsM13: string; pcsM14: string; pcsM15: string;
-  pcsM16: string; pcsM17: string; pcsM18: string; pcsM19: string; pcsM20: string;
-  pcsM21: string; pcsM22: string; pcsM23: string; pcsM24: string; pcsM25: string;
-  pcsM26: string; pcsM27: string; pcsM28: string; pcsM29: string; pcsM30: string;
-  pcsM31: string; pcsM32: string; pcsM33: string; pcsM34: string; pcsM35: string;
-  pcsM36: string; pcsM37: string; pcsM38: string; pcsM39: string;
   [key: string]: string;
 }
 
@@ -22,86 +14,7 @@ const EncuestaSaludMental: React.FC = () => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
-  const [formData, setFormData] = useState<FormData>({
-    pcsM1: '', pcsM2: '', pcsM3: '', pcsM4: '', pcsM5: '',
-    pcsM6: '', pcsM7: '', pcsM8: '', pcsM9: '', pcsM10: '',
-    pcsM11: '', pcsM12: '', pcsM13: '', pcsM14: '', pcsM15: '',
-    pcsM16: '', pcsM17: '', pcsM18: '', pcsM19: '', pcsM20: '',
-    pcsM21: '', pcsM22: '', pcsM23: '', pcsM24: '', pcsM25: '',
-    pcsM26: '', pcsM27: '', pcsM28: '', pcsM29: '', pcsM30: '',
-    pcsM31: '', pcsM32: '', pcsM33: '', pcsM34: '', pcsM35: '',
-    pcsM36: '', pcsM37: '', pcsM38: '', pcsM39: '',
-  });
-
-  // --- LÓGICA DE RECUPERACIÓN DE PROGRESO ---
-  useEffect(() => {
-    const checkProgress = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-
-      const { data } = await supabase
-        .from('encuestas')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      if (data) {
-        const savedData: any = {};
-        Object.keys(formData).forEach(key => {
-          // Supabase devuelve las columnas en minúsculas, por eso usamos toLowerCase()
-          const dbKey = key.toLowerCase();
-          if (data[dbKey]) savedData[key] = String(data[dbKey]);
-        });
-        setFormData(prev => ({ ...prev, ...savedData }));
-      }
-      
-      setIsChecking(false);
-    };
-
-    checkProgress();
-  }, [router]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("No hay sesión de usuario");
-
-      // Convertimos las keys a minúsculas para asegurar compatibilidad con la DB
-      const dataToSave = Object.keys(formData).reduce((acc, key) => {
-        acc[key] = formData[key];
-        return acc;
-      }, {} as any);
-
-      const { error } = await supabase
-        .from('encuestas')
-        .upsert({
-          user_id: user.id,
-          ...dataToSave,
-          current_step: 4, // 👈 Marcamos que la siguiente es la 4 (Zung)
-          updated_at: new Date(),
-        }, { onConflict: 'user_id' });
-
-      if (error) throw error;
-      router.push('/auth/formulario-4');
-
-    } catch (error: any) {
-      console.error('Error al guardar:', error.message);
-      alert('Hubo un problema al guardar tus respuestas.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [formData, setFormData] = useState<FormData>({});
 
   const scaleOptions = [
     { value: '1', label: 'Siempre o casi siempre' },
@@ -152,45 +65,122 @@ const EncuestaSaludMental: React.FC = () => {
     { id: 'pcsM39', text: 'Me siento insatisfecha/o de mi aspecto físico.' },
   ];
 
-  if (isChecking) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    const checkProgress = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return router.push('/login');
+
+      const { data } = await supabase.from('encuestas').select('*').eq('user_id', user.id).single();
+
+      if (data) {
+        const savedData: any = {};
+        questions.forEach(q => {
+          const valueFromDB = data[q.id.toLowerCase()];
+          if (valueFromDB !== undefined && valueFromDB !== null) {
+            savedData[q.id] = String(valueFromDB);
+          }
+        });
+        setFormData(prev => ({ ...prev, ...savedData }));
+      }
+      setIsChecking(false);
+    };
+    checkProgress();
+  }, [router]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No hay sesión");
+
+      const { data: currentRecord } = await supabase
+        .from('encuestas')
+        .select('current_step')
+        .eq('user_id', user.id)
+        .single();
+
+      const nextStep = 4;
+      const stepToSave = Math.max(currentRecord?.current_step || 0, nextStep);
+
+      const dataToSave: any = {
+        user_id: user.id,
+        current_step: stepToSave,
+        updated_at: new Date(),
+      };
+
+      Object.keys(formData).forEach(key => {
+        dataToSave[key.toLowerCase()] = formData[key];
+      });
+
+      const { error } = await supabase.from('encuestas').upsert(dataToSave, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      router.push('/auth/formularios/formulario-4');
+    } catch (error) {
+      console.error(error);
+      alert('Error al guardar');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (isChecking) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4 pb-32">
       <div className="max-w-4xl mx-auto">
+        
+        {/* === CONTENEDOR DE BARRA DE PROGRESO === */}
+        <div className="mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm font-bold text-teal-600 uppercase tracking-wider">Progreso de la encuesta</span>
+            <span className="text-sm font-bold text-gray-500">27%</span>
+          </div>
+          <div className="w-full bg-gray-100 h-3 rounded-full overflow-hidden">
+            <div 
+              className="bg-gradient-to-r from-teal-500 to-cyan-500 h-full transition-all duration-1000 ease-out"
+              style={{ width: '27%' }}
+            ></div>
+          </div>
+          <p className="text-xs text-gray-400 mt-2 text-right font-medium">Estás en la sección 3 de 11</p>
+        </div>
+
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-md mb-4">
             <div className="w-10 h-10 bg-teal-600 rounded-xl flex items-center justify-center text-white text-2xl">🧠</div>
             <h1 className="text-3xl font-bold text-gray-800">Salud Mental</h1>
           </div>
-          <p className="text-gray-600 text-lg">Sección 3 de 11 • Condiciones de Salud Mental</p>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
-          <div className="bg-gradient-to-r from-teal-600 to-cyan-600 px-8 py-6">
-            <h2 className="text-white text-2xl font-semibold">3. Condiciones de Salud Mental</h2>
-            <p className="text-teal-100 mt-1">Selecciona la opción que mejor describe tu forma de pensar, sentir o actuar</p>
+        <div className="bg-white rounded-3xl shadow-xl overflow-hidden mb-10">
+          <div className="bg-gradient-to-r from-teal-600 to-cyan-600 px-8 py-6 text-white">
+            <h2 className="text-2xl font-semibold">3. Condiciones de Salud Mental</h2>
           </div>
 
           <form onSubmit={handleSubmit} className="p-8 space-y-12">
             {questions.map((q, index) => (
-              <div key={q.id} className="border-b border-gray-100 pb-10 last:border-b-0 last:pb-0">
+              <div key={q.id} className="border-b border-gray-100 pb-10 last:border-0">
                 <p className="text-lg font-medium text-gray-800 mb-6 leading-relaxed">
-                  {index + 1}. {q.text}
+                  <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-teal-50 text-teal-600 mr-3 text-sm font-bold">{index + 1}</span>
+                  {q.text}
                 </p>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {scaleOptions.map((option) => (
                     <label
                       key={option.value}
-                      className={`flex items-center justify-center p-5 rounded-2xl border-2 cursor-pointer transition-all hover:scale-105 text-center ${
-                        formData[q.id] === option.value
-                          ? 'border-teal-600 bg-teal-50'
-                          : 'border-gray-200 hover:border-gray-300'
+                      className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all active:scale-95 ${
+                        formData[q.id] === option.value ? 'border-teal-600 bg-teal-50 shadow-inner' : 'border-gray-200'
                       }`}
                     >
                       <input
@@ -202,27 +192,28 @@ const EncuestaSaludMental: React.FC = () => {
                         className="hidden"
                         required
                       />
-                      <div>
-                        <div className="font-bold text-xl text-gray-700">{option.value}</div>
-                        <div className="text-xs text-gray-500 mt-1 leading-tight">{option.label}</div>
-                      </div>
+                      <span className={`text-xl font-bold ${formData[q.id] === option.value ? 'text-teal-700' : 'text-gray-400'}`}>
+                        {option.value}
+                      </span>
+                      <span className="text-[10px] uppercase font-bold text-gray-500 text-center mt-1">
+                        {option.label}
+                      </span>
                     </label>
                   ))}
                 </div>
               </div>
             ))}
 
-            <div className="pt-8">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 disabled:opacity-70 text-white font-semibold py-4 rounded-2xl text-lg shadow-lg shadow-teal-500/30 transition-all duration-200"
-              >
-                {loading ? 'Guardando respuestas...' : 'Guardar y Continuar →'}
-              </button>
-            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-teal-600 to-cyan-600 text-white font-bold py-5 rounded-2xl text-xl shadow-lg hover:scale-[1.01] transition-all active:scale-[0.98] disabled:opacity-50"
+            >
+              {loading ? 'Guardando...' : 'Guardar y Continuar →'}
+            </button>
           </form>
         </div>
+        <p className="text-center text-gray-400 text-xs uppercase tracking-widest">Sección 3 de 11</p>
       </div>
     </div>
   );

@@ -42,7 +42,9 @@ const EncuestaResiliencia: React.FC = () => {
         const savedData: any = {};
         Object.keys(formData).forEach(key => {
           const dbKey = key.toLowerCase();
-          if (data[dbKey]) savedData[key] = String(data[dbKey]);
+          if (data[dbKey] !== null && data[dbKey] !== undefined) {
+            savedData[key] = String(data[dbKey]);
+          }
         });
         setFormData(prev => ({ ...prev, ...savedData }));
       }
@@ -64,6 +66,15 @@ const EncuestaResiliencia: React.FC = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("No hay sesión activa");
 
+      const { data: currentRecord } = await supabase
+        .from('encuestas')
+        .select('current_step')
+        .eq('user_id', user.id)
+        .single();
+
+      const nextStep = 8;
+      const stepToSave = Math.max(currentRecord?.current_step || 0, nextStep);
+
       const dataToSave = Object.keys(formData).reduce((acc, key) => {
         acc[key.toLowerCase()] = formData[key];
         return acc;
@@ -74,27 +85,25 @@ const EncuestaResiliencia: React.FC = () => {
         .upsert({
           user_id: user.id,
           ...dataToSave,
-          current_step: 8,
-          updated_at: new Date(),
+          current_step: stepToSave,
+          updated_at: new Date().toISOString(),
         }, { onConflict: 'user_id' });
 
       if (error) throw error;
-      router.push('/auth/formulario-8');
+      router.push('/auth/formularios/formulario-8');
 
-    } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : "Error desconocido";
-      console.error('Error:', msg);
-      alert('Error al guardar la sección de resiliencia.');
+    } catch (error: any) {
+      alert('Error al guardar: ' + error.message);
     } finally {
       setLoading(false);
     }
   };
 
   const resilienceOptions = [
-    { value: '1', label: 'Totalmente en desacuerdo' },
-    { value: '2', label: 'Muy en desacuerdo' },
+    { value: '1', label: 'Totalmente desacuerdo' },
+    { value: '2', label: 'Muy desacuerdo' },
     { value: '3', label: 'En desacuerdo' },
-    { value: '4', label: 'Ni de acuerdo ni en desacuerdo' },
+    { value: '4', label: 'Neutral' },
     { value: '5', label: 'De acuerdo' },
     { value: '6', label: 'Muy de acuerdo' },
     { value: '7', label: 'Totalmente de acuerdo' },
@@ -129,54 +138,86 @@ const EncuestaResiliencia: React.FC = () => {
   ];
 
   if (isChecking) return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4 pb-32">
       <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-md mb-4">
-            <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white text-2xl">💪</div>
-            <h1 className="text-3xl font-bold text-gray-800">Escala de Resiliencia</h1>
+        
+        {/* === BARRA DE PROGRESO (63% para Sección 7) === */}
+        <div className="mb-8 bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-sm font-bold text-emerald-600 uppercase tracking-wider">Progreso de la encuesta</span>
+            <span className="text-sm font-bold text-gray-500">63%</span>
           </div>
-          <p className="text-gray-600 text-lg">Sección 7 de 11 • Evaluación de Resiliencia</p>
+          <div className="w-full bg-gray-100 h-3 rounded-full overflow-hidden">
+            <div 
+              className="bg-gradient-to-r from-emerald-500 to-teal-500 h-full transition-all duration-1000 ease-out"
+              style={{ width: '63%' }}
+            ></div>
+          </div>
+          <p className="text-xs text-gray-400 mt-2 text-right font-medium">Sección 7 de 11 • Escala de Resiliencia</p>
         </div>
 
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
-          <div className="w-full bg-gray-100 h-2">
-            <div className="bg-emerald-600 h-2 w-[63%] transition-all duration-500"></div>
-          </div>
-          <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-8 py-6 text-white">
-            <h2 className="text-2xl font-semibold">7. Escala de Resiliencia</h2>
-            <p className="opacity-90">Indica qué tan de acuerdo o en desacuerdo estás con cada afirmación</p>
+        <div className="bg-white rounded-3xl shadow-xl overflow-hidden mb-10">
+          <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-8 py-6 text-white text-center">
+            <h2 className="text-2xl font-bold uppercase tracking-tight">7. Escala de Resiliencia</h2>
+            <p className="text-emerald-100 text-sm mt-1 opacity-90">Indica qué tan de acuerdo o en desacuerdo estás con cada afirmación</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-8 space-y-10">
+          <form onSubmit={handleSubmit} className="p-8 space-y-12">
             {questions.map((q, index) => (
-              <div key={q.id} className="border-b border-gray-100 pb-10 last:border-b-0 last:pb-0">
-                <p className="text-lg font-medium text-gray-800 mb-6">{index + 1}. {q.text}</p>
-                <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
+              <div key={q.id} className="border-b border-gray-50 pb-10 last:border-0">
+                <p className="text-lg font-medium text-gray-800 mb-6 leading-relaxed">
+                  <span className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 mr-3 text-sm font-bold">{index + 1}</span>
+                  {q.text}
+                </p>
+                <div className="grid grid-cols-4 md:grid-cols-7 gap-2">
                   {resilienceOptions.map((opt) => (
-                    <label key={opt.value} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                      formData[q.id] === opt.value ? 'border-emerald-600 bg-emerald-50' : 'border-gray-200 hover:border-gray-300'
-                    }`}>
-                      <input type="radio" name={q.id} value={opt.value} checked={formData[q.id] === opt.value} onChange={handleChange} className="hidden" required />
-                      <span className="font-bold text-xl">{opt.value}</span>
-                      <span className="text-[8px] uppercase text-center font-bold text-gray-400 leading-tight">{opt.label}</span>
+                    <label
+                      key={opt.value}
+                      className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 cursor-pointer transition-all active:scale-95 text-center min-h-[80px] ${
+                        formData[q.id] === opt.value 
+                        ? 'border-emerald-600 bg-emerald-50 shadow-inner' 
+                        : 'border-gray-50 bg-gray-50 hover:border-emerald-200'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name={q.id}
+                        value={opt.value}
+                        checked={formData[q.id] === opt.value}
+                        onChange={handleChange}
+                        className="hidden"
+                        required
+                      />
+                      <span className={`text-lg font-black ${formData[q.id] === opt.value ? 'text-emerald-700' : 'text-gray-300'}`}>
+                        {opt.value}
+                      </span>
+                      <span className="text-[7px] uppercase font-bold text-gray-500 mt-1 leading-none">
+                        {opt.label}
+                      </span>
                     </label>
                   ))}
                 </div>
               </div>
             ))}
 
-            <button disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-5 rounded-2xl text-xl shadow-lg transition-all">
-              {loading ? 'Guardando...' : 'Guardar y Continuar →'}
-            </button>
+            <div className="pt-6">
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold py-5 rounded-2xl text-xl shadow-xl shadow-emerald-100 transition-all active:scale-[0.98] disabled:opacity-50"
+              >
+                {loading ? 'Guardando respuestas...' : 'Guardar y Continuar →'}
+              </button>
+            </div>
           </form>
         </div>
+        <p className="text-center text-gray-400 text-xs uppercase tracking-widest pb-10">Continuar al Formulario 8</p>
       </div>
     </div>
   );

@@ -46,7 +46,7 @@ export default function SignUpSuccessPage() {
 
   const handleNavigation = () => {
     // Si el step es 1, va al formulario-1, si es 2 al formulario-2, etc.
-    router.push(`/auth/formulario-${step}`);
+    router.push(`/auth/formularios/formulario-${step}`);
   };
 
   return (
