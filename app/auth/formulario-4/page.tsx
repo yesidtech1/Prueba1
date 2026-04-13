@@ -1,15 +1,23 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 interface FormData {
   pzung1: string; pzung2: string; pzung3: string; pzung4: string; pzung5: string;
   pzung6: string; pzung7: string; pzung8: string; pzung9: string; pzung10: string;
   pzung11: string; pzung12: string; pzung13: string; pzung14: string; pzung15: string;
   pzung16: string; pzung17: string; pzung18: string; pzung19: string; pzung20: string;
+  [key: string]: string;
 }
 
+const supabase = createClient();
+
 const EncuestaZung: React.FC = () => {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [isChecking, setIsChecking] = useState(true); // Para evitar parpadeo visual
   const [formData, setFormData] = useState<FormData>({
     pzung1: '', pzung2: '', pzung3: '', pzung4: '', pzung5: '',
     pzung6: '', pzung7: '', pzung8: '', pzung9: '', pzung10: '',
@@ -17,22 +25,78 @@ const EncuestaZung: React.FC = () => {
     pzung16: '', pzung17: '', pzung18: '', pzung19: '', pzung20: '',
   });
 
-  const [loading, setLoading] = useState(false);
+  // --- LÓGICA DE RECUPERACIÓN DE PROGRESO ---
+  useEffect(() => {
+    const checkProgress = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      const { data } = await supabase
+        .from('encuestas')
+        .select('current_step, pzung1, pzung2, pzung3, pzung4, pzung5, pzung6, pzung7, pzung8, pzung9, pzung10, pzung11, pzung12, pzung13, pzung14, pzung15, pzung16, pzung17, pzung18, pzung19, pzung20')
+        .eq('user_id', user.id)
+        .single();
+
+      // 1. Si el usuario ya va en un paso muy superior, lo mandamos allá
+      if (data && data.current_step > 4) {
+        router.push(`/auth/formulario-${data.current_step}`);
+        return;
+      }
+
+      // 2. Si ya tenía respuestas parciales en esta sesión, las cargamos
+      if (data) {
+        const savedData: any = {};
+        Object.keys(formData).forEach(key => {
+          if (data[key.toLowerCase()]) savedData[key] = data[key.toLowerCase()];
+        });
+        setFormData(prev => ({ ...prev, ...savedData }));
+      }
+      
+      setIsChecking(false);
+    };
+
+    checkProgress();
+  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    setTimeout(() => {
-      console.log('Datos Escala de Zung:', formData);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No hay sesión activa");
+
+      // Estandarizar a minúsculas para la DB
+      const dataToSave = Object.keys(formData).reduce((acc, key) => {
+        acc[key.toLowerCase()] = formData[key];
+        return acc;
+      }, {} as any);
+
+      const { error } = await supabase
+        .from('encuestas')
+        .upsert({
+          user_id: user.id,
+          ...dataToSave,
+          current_step: 5, // 👈 Marcamos que la siguiente es la 5
+          updated_at: new Date(),
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      router.push('/auth/formulario-5');
+
+    } catch (error: any) {
+      alert('Error al guardar: ' + error.message);
+    } finally {
       setLoading(false);
-      alert('¡Escala de Zung guardada correctamente! 🎉');
-    }, 1000);
+    }
   };
 
   const zungOptions = [
@@ -65,10 +129,17 @@ const EncuestaZung: React.FC = () => {
     { id: 'pzung20', text: 'Tengo pesadillas.' },
   ];
 
+  if (isChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-rose-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
       <div className="max-w-4xl mx-auto">
-        
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-md mb-4">
             <div className="w-10 h-10 bg-rose-600 rounded-xl flex items-center justify-center text-white text-2xl">😟</div>
@@ -95,7 +166,7 @@ const EncuestaZung: React.FC = () => {
                     <label
                       key={option.value}
                       className={`flex flex-col items-center justify-center p-6 rounded-2xl border-2 cursor-pointer transition-all hover:scale-105 text-center min-h-[110px] ${
-                        formData[q.id as keyof FormData] === option.value
+                        formData[q.id] === option.value
                           ? 'border-rose-600 bg-rose-50 shadow-sm'
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
@@ -104,9 +175,10 @@ const EncuestaZung: React.FC = () => {
                         type="radio"
                         name={q.id}
                         value={option.value}
-                        checked={formData[q.id as keyof FormData] === option.value}
+                        checked={formData[q.id] === option.value}
                         onChange={handleChange}
                         className="hidden"
+                        required
                       />
                       <div className="font-bold text-2xl text-gray-700 mb-1">{option.value}</div>
                       <div className="text-sm text-gray-600 leading-tight">{option.label}</div>
@@ -116,7 +188,6 @@ const EncuestaZung: React.FC = () => {
               </div>
             ))}
 
-            {/* Submit Button */}
             <div className="pt-8">
               <button
                 type="submit"
@@ -128,10 +199,6 @@ const EncuestaZung: React.FC = () => {
             </div>
           </form>
         </div>
-
-        <p className="text-center text-gray-500 text-sm mt-8">
-          Sección 4 de 11 • Escala de Zung (Ansiedad)
-        </p>
       </div>
     </div>
   );

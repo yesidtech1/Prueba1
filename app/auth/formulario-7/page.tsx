@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 interface FormData {
   resil1: string; resil2: string; resil3: string; resil4: string; resil5: string;
@@ -8,9 +10,15 @@ interface FormData {
   resil11: string; resil12: string; resil13: string; resil14: string; resil15: string;
   resil16: string; resil17: string; resil18: string; resil19: string; resil20: string;
   resil21: string; resil22: string; resil23: string; resil24: string; resil25: string;
+  [key: string]: string;
 }
 
+const supabase = createClient();
+
 const EncuestaResiliencia: React.FC = () => {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
   const [formData, setFormData] = useState<FormData>({
     resil1: '', resil2: '', resil3: '', resil4: '', resil5: '',
     resil6: '', resil7: '', resil8: '', resil9: '', resil10: '',
@@ -19,22 +27,67 @@ const EncuestaResiliencia: React.FC = () => {
     resil21: '', resil22: '', resil23: '', resil24: '', resil25: '',
   });
 
-  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    const checkProgress = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return router.push('/login');
+
+      const { data } = await supabase
+        .from('encuestas')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (data) {
+        const savedData: any = {};
+        Object.keys(formData).forEach(key => {
+          const dbKey = key.toLowerCase();
+          if (data[dbKey]) savedData[key] = String(data[dbKey]);
+        });
+        setFormData(prev => ({ ...prev, ...savedData }));
+      }
+      setIsChecking(false);
+    };
+    checkProgress();
+  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    setTimeout(() => {
-      console.log('Datos Escala de Resiliencia:', formData);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No hay sesión activa");
+
+      const dataToSave = Object.keys(formData).reduce((acc, key) => {
+        acc[key.toLowerCase()] = formData[key];
+        return acc;
+      }, {} as any);
+
+      const { error } = await supabase
+        .from('encuestas')
+        .upsert({
+          user_id: user.id,
+          ...dataToSave,
+          current_step: 8,
+          updated_at: new Date(),
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      router.push('/auth/formulario-8');
+
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Error desconocido";
+      console.error('Error:', msg);
+      alert('Error al guardar la sección de resiliencia.');
+    } finally {
       setLoading(false);
-      alert('¡Encuesta completada! Todas las secciones han sido guardadas. 🎉');
-    }, 1200);
+    }
   };
 
   const resilienceOptions = [
@@ -75,10 +128,15 @@ const EncuestaResiliencia: React.FC = () => {
     { id: 'resil25', text: 'Está bien si hay personas que no me quieren.' },
   ];
 
+  if (isChecking) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
       <div className="max-w-4xl mx-auto">
-        
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-md mb-4">
             <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center text-white text-2xl">💪</div>
@@ -88,62 +146,37 @@ const EncuestaResiliencia: React.FC = () => {
         </div>
 
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
-          <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-8 py-6">
-            <h2 className="text-white text-2xl font-semibold">7. Escala de Resiliencia</h2>
-            <p className="text-emerald-100 mt-1">Indica qué tan de acuerdo o en desacuerdo estás con cada afirmación</p>
+          <div className="w-full bg-gray-100 h-2">
+            <div className="bg-emerald-600 h-2 w-[63%] transition-all duration-500"></div>
+          </div>
+          <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-8 py-6 text-white">
+            <h2 className="text-2xl font-semibold">7. Escala de Resiliencia</h2>
+            <p className="opacity-90">Indica qué tan de acuerdo o en desacuerdo estás con cada afirmación</p>
           </div>
 
           <form onSubmit={handleSubmit} className="p-8 space-y-10">
             {questions.map((q, index) => (
               <div key={q.id} className="border-b border-gray-100 pb-10 last:border-b-0 last:pb-0">
-                <p className="text-lg font-medium text-gray-800 mb-6 leading-relaxed">
-                  {index + 1}. {q.text}
-                </p>
-                
-                <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
-                  {resilienceOptions.map((option) => (
-                    <label
-                      key={option.value}
-                      className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all hover:scale-105 text-center min-h-[100px] ${
-                        formData[q.id as keyof FormData] === option.value
-                          ? 'border-emerald-600 bg-emerald-50 shadow-sm'
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name={q.id}
-                        value={option.value}
-                        checked={formData[q.id as keyof FormData] === option.value}
-                        onChange={handleChange}
-                        className="hidden"
-                      />
-                      <div className="font-bold text-2xl text-gray-700">{option.value}</div>
-                      <div className="text-[10px] leading-tight text-gray-500 mt-1 text-center">
-                        {option.label}
-                      </div>
+                <p className="text-lg font-medium text-gray-800 mb-6">{index + 1}. {q.text}</p>
+                <div className="grid grid-cols-2 md:grid-cols-7 gap-2">
+                  {resilienceOptions.map((opt) => (
+                    <label key={opt.value} className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                      formData[q.id] === opt.value ? 'border-emerald-600 bg-emerald-50' : 'border-gray-200 hover:border-gray-300'
+                    }`}>
+                      <input type="radio" name={q.id} value={opt.value} checked={formData[q.id] === opt.value} onChange={handleChange} className="hidden" required />
+                      <span className="font-bold text-xl">{opt.value}</span>
+                      <span className="text-[8px] uppercase text-center font-bold text-gray-400 leading-tight">{opt.label}</span>
                     </label>
                   ))}
                 </div>
               </div>
             ))}
 
-            {/* Final Submit Button */}
-            <div className="pt-10 border-t border-gray-200">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-70 text-white font-semibold py-5 rounded-2xl text-xl shadow-xl shadow-emerald-500/40 transition-all duration-200 active:scale-[0.98]"
-              >
-                {loading ? 'Guardando...' : 'Guardar y Continuar →'}
-              </button>
-            </div>
+            <button disabled={loading} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-5 rounded-2xl text-xl shadow-lg transition-all">
+              {loading ? 'Guardando...' : 'Guardar y Continuar →'}
+            </button>
           </form>
         </div>
-
-        <p className="text-center text-gray-500 text-sm mt-8">
-          Sección 7 de 11 • Escala de Resiliencia
-        </p>
       </div>
     </div>
   );

@@ -27,7 +27,9 @@ export function LoginForm({
   const [isLoading, setIsLoading] = useState(false);
 
   const router = useRouter();
-  if(isLoading) return
+  // if (isLoading) {
+  // return <p>Cargando...</p>;
+  // }
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -55,18 +57,19 @@ export function LoginForm({
 
       // router.push("/formulario-1");
       // router.refresh();
-      router.replace("/formulario-1")
+      router.refresh();
+      router.replace("/auth/sign-up-success")
+
 
     } catch (error: unknown) {
+      setIsLoading(false);
       const message =
         error instanceof Error
           ? error.message
           : "Ocurrió un error al iniciar sesión";
 
       setError(message);
-    } finally {
-      setIsLoading(false);
-    }
+    } 
   };
 
   return (

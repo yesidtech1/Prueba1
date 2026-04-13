@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 interface FormData {
   pff1: string;
@@ -8,234 +10,172 @@ interface FormData {
   pff3: string;
   pff4: string;
   pff5: string;
+  [key: string]: string;
 }
 
-const EncuestaFuncionamientoFamiliar: React.FC = () => {
+const supabase = createClient();
+
+const EncuestaFamiliar: React.FC = () => {
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
   const [formData, setFormData] = useState<FormData>({
     pff1: '', pff2: '', pff3: '', pff4: '', pff5: '',
   });
 
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
+  // --- LÓGICA DE RECUPERACIÓN DE PROGRESO ---
+  useEffect(() => {
+    const checkProgress = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      const { data } = await supabase
+        .from('encuestas')
+        .select('current_step, pff1, pff2, pff3, pff4, pff5')
+        .eq('user_id', user.id)
+        .single();
+
+      // Redirección si ya va mucho más adelante (opcional)
+      if (data && data.current_step > 2) {
+        // Podrías dejar que edite, o mandarlo directo al paso actual:
+        // router.push(`/auth/formulario-${data.current_step}`);
+      }
+
+      if (data) {
+        const savedData: any = {};
+        Object.keys(formData).forEach(key => {
+          if (data[key]) savedData[key] = String(data[key]);
+        });
+        setFormData(prev => ({ ...prev, ...savedData }));
+      }
+      
+      setIsChecking(false);
+    };
+
+    checkProgress();
+  }, [router]);
+
+  const questions = [
+    { id: 'pff1', label: '1. ¿Estás satisfecho con la ayuda que recibes de tu familia cuando tienes algún problema?' },
+    { id: 'pff2', label: '2. ¿Estás satisfecho con la forma en que tu familia conversa contigo y comparte tus problemas?' },
+    { id: 'pff3', label: '3. ¿Estás satisfecho con la forma en que tu familia acepta y apoya tus deseos de realizar nuevas actividades o cambios en tu vida?' },
+    { id: 'pff4', label: '4. ¿Estás satisfecho con la forma en que tu familia expresa afecto y responde a tus emociones (angustia, amor, rabia)?' },
+    { id: 'pff5', label: '5. ¿Estás satisfecho con la forma en que tú y tu familia comparten el tiempo juntos?' },
+  ];
+
+  const options = [
+    { value: '1', label: 'Nunca' },
+    { value: '2', label: 'Casi nunca' },
+    { value: '3', label: 'A veces' },
+    { value: '4', label: 'Casi siempre' },
+    { value: '5', label: 'Siempre' },
+  ];
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setIsSubmitting(true);
 
-    // Simulación de guardado (luego lo conectaremos a Supabase)
-    setTimeout(() => {
-      console.log('Datos guardados:', formData);
-      setSuccess(true);
-      setLoading(false);
-      
-      alert('¡Sección guardada correctamente! 🎉');
-    }, 800);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No hay sesión");
+
+      const { error } = await supabase
+        .from('encuestas')
+        .upsert({
+          user_id: user.id,
+          ...formData,
+          current_step: 3, // 👈 Marcamos que la siguiente es la 3
+          updated_at: new Date(),
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      router.push('/auth/formulario-3');
+
+    } catch (error: any) {
+      console.error('Error:', error.message);
+      alert('Error al guardar: ' + error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const options = [
-    { value: '1', label: '1 - Nunca' },
-    { value: '2', label: '2 - Muy rara vez' },
-    { value: '3', label: '3 - Algunas veces' },
-    { value: '4', label: '4 - Casi siempre' },
-    { value: '5', label: '5 - Siempre' },
-  ];
+  if (isChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-violet-600"></div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-violet-100 py-12 px-4">
       <div className="max-w-3xl mx-auto">
-        
-        {/* Header */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-md mb-4">
-            <div className="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center text-white text-2xl">👨‍👩‍👧‍👦</div>
-            <h1 className="text-3xl font-bold text-gray-800">Funcionamiento Familiar</h1>
-          </div>
-          <p className="text-gray-600 text-lg">Sección 2 de 11 • Valoración del Funcionamiento Familiar</p>
-        </div>
-
-        {/* Form Card */}
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
+          <div className="w-full bg-gray-100 h-2">
+            <div className="bg-violet-600 h-2 w-[18%] transition-all duration-500"></div>
+          </div>
+
           <div className="bg-gradient-to-r from-purple-600 to-violet-600 px-8 py-6">
-            <h2 className="text-white text-2xl font-semibold">2. Valoración de Funcionamiento Familiar</h2>
-            <p className="text-purple-100 mt-1">Indica qué tan satisfecho/a estás con cada aspecto</p>
+            <h2 className="text-white text-2xl font-semibold">Sección 2: Funcionamiento Familiar (APGAR)</h2>
+            <p className="text-purple-100 text-sm mt-1">Evalúa tu percepción sobre tu entorno familiar.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="p-8 space-y-10">
-            
-            {/* Pregunta 1 */}
-            <div className="space-y-4">
-              <label className="block text-lg font-medium text-gray-800 leading-relaxed">
-                A. Me satisface la ayuda que recibo de mi familia cuando tengo algún problema y/o necesidad.
-              </label>
-              <div className="grid grid-cols-5 gap-3">
-                {options.map((opt) => (
-                  <label
-                    key={opt.value}
-                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all hover:scale-105 ${
-                      formData.pff1 === opt.value 
-                        ? 'border-purple-600 bg-purple-50' 
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="pff1"
-                      value={opt.value}
-                      checked={formData.pff1 === opt.value}
-                      onChange={handleChange}
-                      className="hidden"
-                    />
-                    <span className="text-2xl font-bold text-gray-700">{opt.value}</span>
-                    <span className="text-xs text-center text-gray-500 mt-1 leading-tight">{opt.label.split(' - ')[1]}</span>
-                  </label>
-                ))}
+            {questions.map((q) => (
+              <div key={q.id} className="space-y-4">
+                <p className="text-gray-800 font-medium text-lg">{q.label}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                  {options.map((opt) => (
+                    <label
+                      key={opt.value}
+                      className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                        formData[q.id] === opt.value
+                          ? 'border-violet-600 bg-violet-50'
+                          : 'border-gray-100 bg-gray-50 hover:border-violet-200'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name={q.id}
+                        value={opt.value}
+                        checked={formData[q.id] === opt.value}
+                        onChange={handleChange}
+                        className="hidden"
+                        required
+                      />
+                      <span className={`text-xl font-bold ${formData[q.id] === opt.value ? 'text-violet-600' : 'text-gray-400'}`}>
+                        {opt.value}
+                      </span>
+                      <span className="text-xs text-center text-gray-500 mt-1">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
+            ))}
 
-            {/* Pregunta 2 */}
-            <div className="space-y-4">
-              <label className="block text-lg font-medium text-gray-800 leading-relaxed">
-                B. Me satisface la participación que mi familia me brinda y permite.
-              </label>
-              <div className="grid grid-cols-5 gap-3">
-                {options.map((opt) => (
-                  <label
-                    key={opt.value}
-                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all hover:scale-105 ${
-                      formData.pff2 === opt.value 
-                        ? 'border-purple-600 bg-purple-50' 
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="pff2"
-                      value={opt.value}
-                      checked={formData.pff2 === opt.value}
-                      onChange={handleChange}
-                      className="hidden"
-                    />
-                    <span className="text-2xl font-bold text-gray-700">{opt.value}</span>
-                    <span className="text-xs text-center text-gray-500 mt-1 leading-tight">{opt.label.split(' - ')[1]}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Pregunta 3 */}
-            <div className="space-y-4">
-              <label className="block text-lg font-medium text-gray-800 leading-relaxed">
-                C. Me satisface como mi familia acepta y apoya mis deseos de emprendimiento y nuevas actividades.
-              </label>
-              <div className="grid grid-cols-5 gap-3">
-                {options.map((opt) => (
-                  <label
-                    key={opt.value}
-                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all hover:scale-105 ${
-                      formData.pff3 === opt.value 
-                        ? 'border-purple-600 bg-purple-50' 
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="pff3"
-                      value={opt.value}
-                      checked={formData.pff3 === opt.value}
-                      onChange={handleChange}
-                      className="hidden"
-                    />
-                    <span className="text-2xl font-bold text-gray-700">{opt.value}</span>
-                    <span className="text-xs text-center text-gray-500 mt-1 leading-tight">{opt.label.split(' - ')[1]}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Pregunta 4 */}
-            <div className="space-y-4">
-              <label className="block text-lg font-medium text-gray-800 leading-relaxed">
-                D. Me satisface como mi familia expresa afectos y responde a mis emociones (rabia, tristeza, amor).
-              </label>
-              <div className="grid grid-cols-5 gap-3">
-                {options.map((opt) => (
-                  <label
-                    key={opt.value}
-                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all hover:scale-105 ${
-                      formData.pff4 === opt.value 
-                        ? 'border-purple-600 bg-purple-50' 
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="pff4"
-                      value={opt.value}
-                      checked={formData.pff4 === opt.value}
-                      onChange={handleChange}
-                      className="hidden"
-                    />
-                    <span className="text-2xl font-bold text-gray-700">{opt.value}</span>
-                    <span className="text-xs text-center text-gray-500 mt-1 leading-tight">{opt.label.split(' - ')[1]}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Pregunta 5 */}
-            <div className="space-y-4">
-              <label className="block text-lg font-medium text-gray-800 leading-relaxed">
-                E. Me satisface como compartimos en mi familia el tiempo para estudiar juntos, los espacios en la casa y el dinero.
-              </label>
-              <div className="grid grid-cols-5 gap-3">
-                {options.map((opt) => (
-                  <label
-                    key={opt.value}
-                    className={`flex flex-col items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all hover:scale-105 ${
-                      formData.pff5 === opt.value 
-                        ? 'border-purple-600 bg-purple-50' 
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="pff5"
-                      value={opt.value}
-                      checked={formData.pff5 === opt.value}
-                      onChange={handleChange}
-                      className="hidden"
-                    />
-                    <span className="text-2xl font-bold text-gray-700">{opt.value}</span>
-                    <span className="text-xs text-center text-gray-500 mt-1 leading-tight">{opt.label.split(' - ')[1]}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Submit Button */}
-            <div className="pt-8 border-t">
+            <div className="pt-6">
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-700 hover:to-violet-700 disabled:opacity-70 text-white font-semibold py-4 rounded-2xl text-lg shadow-lg shadow-purple-500/30 transition-all duration-200 active:scale-[0.98]"
+                disabled={isSubmitting}
+                className="w-full bg-gradient-to-r from-purple-600 to-violet-600 text-white font-semibold py-4 rounded-2xl text-lg shadow-lg shadow-purple-500/30 hover:scale-[1.01] active:scale-[0.98] transition-all disabled:opacity-50"
               >
-                {loading ? 'Guardando...' : 'Guardar y Continuar →'}
+                {isSubmitting ? "Guardando..." : "Guardar y Continuar →"}
               </button>
             </div>
           </form>
         </div>
-
-        <p className="text-center text-gray-500 text-sm mt-8">
-          Sección 2 de 11 • Funcionamiento Familiar
-        </p>
+        <p className="text-center text-gray-500 text-sm mt-8">Sección 2 de 11 • APGAR Familiar</p>
       </div>
     </div>
   );
 };
 
-export default EncuestaFuncionamientoFamiliar;
+export default EncuestaFamiliar;

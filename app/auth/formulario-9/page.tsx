@@ -1,34 +1,87 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 interface FormData {
   csust1: string; csust2: string; csust3: string; csust4: string; csust5: string;
   csust6: string; csust7: string; csust8: string; csust9: string;
+  [key: string]: string;
 }
 
+const supabase = createClient();
+
 const EncuestaFrecuenciaConsumo: React.FC = () => {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
   const [formData, setFormData] = useState<FormData>({
     csust1: '', csust2: '', csust3: '', csust4: '', csust5: '',
     csust6: '', csust7: '', csust8: '', csust9: '',
   });
 
-  const [loading, setLoading] = useState(false);
+  // --- RECUPERAR DATOS ---
+  useEffect(() => {
+    const checkProgress = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return router.push('/login');
+
+      const { data } = await supabase
+        .from('encuestas')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (data) {
+        const savedData: any = {};
+        Object.keys(formData).forEach(key => {
+          const dbKey = key.toLowerCase();
+          if (data[dbKey]) savedData[key] = String(data[dbKey]);
+        });
+        setFormData(prev => ({ ...prev, ...savedData }));
+      }
+      setIsChecking(false);
+    };
+    checkProgress();
+  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    setTimeout(() => {
-      console.log('Frecuencia de Consumo:', formData);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Sesión no encontrada");
+
+      const dataToSave = Object.keys(formData).reduce((acc, key) => {
+        acc[key.toLowerCase()] = formData[key];
+        return acc;
+      }, {} as any);
+
+      const { error } = await supabase
+        .from('encuestas')
+        .upsert({
+          user_id: user.id,
+          ...dataToSave,
+          current_step: 10, // Siguiente paso
+          updated_at: new Date(),
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      router.push('/auth/formulario-10');
+
+    } catch (error: unknown) {
+      console.error('Error al guardar sesión 9:', error);
+      alert('Hubo un error al guardar la frecuencia de consumo.');
+    } finally {
       setLoading(false);
-      alert('¡Sección 9 guardada correctamente! 🎉');
-    }, 1000);
+    }
   };
 
   const frequencyOptions = [
@@ -50,10 +103,15 @@ const EncuestaFrecuenciaConsumo: React.FC = () => {
     { id: 'csust9', name: 'Opiáceos (heroína, morfina, etc.)' },
   ];
 
+  if (isChecking) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600"></div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
       <div className="max-w-4xl mx-auto">
-        
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-md mb-4">
             <div className="w-10 h-10 bg-amber-600 rounded-xl flex items-center justify-center text-white text-2xl">📅</div>
@@ -63,50 +121,43 @@ const EncuestaFrecuenciaConsumo: React.FC = () => {
         </div>
 
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
-          <div className="bg-gradient-to-r from-amber-600 to-orange-600 px-8 py-6">
-            <h2 className="text-white text-2xl font-semibold">9. Frecuencia de Consumo de Sustancias</h2>
-            <p className="text-amber-100 mt-1">Solo para las sustancias que marcaste como `Si` anteriormente</p>
+          <div className="w-full bg-gray-100 h-2">
+            <div className="bg-amber-600 h-2 w-[81%] transition-all duration-500"></div>
+          </div>
+          
+          <div className="bg-gradient-to-r from-amber-600 to-orange-600 px-8 py-6 text-white">
+            <h2 className="text-2xl font-semibold">9. Frecuencia de Consumo de Sustancias</h2>
+            <p className="opacity-90 mt-1">Indica la última vez que consumiste cada sustancia</p>
           </div>
 
           <form onSubmit={handleSubmit} className="p-8 space-y-8">
             {substances.map((sub, index) => (
-              <div key={sub.id} className="p-6 bg-gray-50 rounded-2xl border border-gray-100">
+              <div key={sub.id} className="p-6 bg-gray-50 rounded-2xl border border-gray-100 hover:border-amber-200 transition-all">
                 <p className="font-medium text-gray-800 mb-4">
                   {index + 1}. {sub.name}
                 </p>
-                
                 <select
                   name={sub.id}
-                  value={formData[sub.id as keyof FormData]}
+                  value={formData[sub.id]}
                   onChange={handleChange}
-                  className="w-full px-5 py-4 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all"
+                  className="w-full px-5 py-4 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-200 transition-all appearance-none"
                   required
                 >
                   <option value="">Selecciona la frecuencia</option>
                   {frequencyOptions.map(opt => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
               </div>
             ))}
 
             <div className="pt-8">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:opacity-70 text-white font-semibold py-4 rounded-2xl text-lg shadow-lg transition-all"
-              >
+              <button disabled={loading} className="w-full bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-bold py-5 rounded-2xl text-lg shadow-lg transition-all active:scale-[0.98]">
                 {loading ? 'Guardando...' : 'Guardar y Continuar →'}
               </button>
             </div>
           </form>
         </div>
-
-        <p className="text-center text-gray-500 text-sm mt-8">
-          Sección 9 de 11 • Frecuencia de Consumo
-        </p>
       </div>
     </div>
   );

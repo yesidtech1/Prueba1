@@ -1,59 +1,116 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 interface FormData {
   sexo: string;
   edad: string;
   estrato: string;
-  estadoCivil: string;
-  tieneHijos: string;
-  numeroHijos: string;
+  estado_civil: string;
+  tiene_hijos: string;
+  numero_hijos: string;
   universidad: string;
   carrera: string;
   semestre: string;
   creditos: string;
   materias: string;
-  promedioAcumulado: string;
-  trabajaActual: string;
-  tipoVinculacion: string;
-  condicionPermanente: string;
+  promedio_acumulado: string;
+  trabaja_actual: string;
+  tipo_vinculacion: string;
+  condicion_permanente: string;
+  [key: string]: string; // Para permitir el acceso dinámico
 }
 
+const supabase = createClient();
+
 const EncuestaDemografica: React.FC = () => {
+  const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
   const [formData, setFormData] = useState<FormData>({
-    sexo: '',
-    edad: '',
-    estrato: '',
-    estadoCivil: '',
-    tieneHijos: '',
-    numeroHijos: '',
-    universidad: '',
-    carrera: '',
-    semestre: '',
-    creditos: '',
-    materias: '',
-    promedioAcumulado: '',
-    trabajaActual: '',
-    tipoVinculacion: '',
-    condicionPermanente: '',
+    sexo: '', edad: '', estrato: '', estado_civil: '', tiene_hijos: '',
+    numero_hijos: '', universidad: '', carrera: '', semestre: '',
+    creditos: '', materias: '', promedio_acumulado: '', trabaja_actual: '',
+    tipo_vinculacion: '', condicion_permanente: '',
   });
+
+  // --- LÓGICA DE RECUPERACIÓN DE PROGRESO ---
+  useEffect(() => {
+    const checkProgress = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      const { data } = await supabase
+        .from('encuestas')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (data) {
+        // Si el usuario ya completó este paso (o superiores), podemos precargar los datos
+        // pero le permitimos estar aquí por si quiere editar.
+        const savedData: any = {};
+        Object.keys(formData).forEach(key => {
+          if (data[key]) savedData[key] = String(data[key]);
+        });
+        setFormData(prev => ({ ...prev, ...savedData }));
+      }
+      
+      setIsChecking(false);
+    };
+
+    checkProgress();
+  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Datos enviados:', formData);
-    alert('¡Formulario enviado correctamente!');
+    setIsSubmitting(true);
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No se encontró sesión de usuario");
+
+      const { error } = await supabase
+        .from('encuestas')
+        .upsert({
+          user_id: user.id,
+          ...formData,
+          current_step: 2, // 👈 Al terminar la sesión 1, el siguiente paso es la 2
+          updated_at: new Date(),
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      router.push('/auth/formulario-2');
+
+    } catch (error) {
+      console.error('Error al guardar:', error);
+      alert('Hubo un error al guardar los datos');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
+
+  if (isChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
       <div className="max-w-3xl mx-auto">
-        {/* Header */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-md mb-4">
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-2xl">📋</div>
@@ -62,107 +119,65 @@ const EncuestaDemografica: React.FC = () => {
           <p className="text-gray-600 text-lg">Datos Sociodemográficos y Perfil Académico</p>
         </div>
 
-        {/* Form Card */}
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
+          <div className="w-full bg-gray-100 h-2">
+            <div className="bg-indigo-600 h-2 w-[9%] transition-all duration-500"></div>
+          </div>
+          
           <div className="bg-gradient-to-r from-indigo-600 to-blue-600 px-8 py-6">
             <h2 className="text-white text-2xl font-semibold">Sección 1: Información Personal</h2>
           </div>
 
           <form onSubmit={handleSubmit} className="p-8 space-y-8">
-            
-            {/* Row 1 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">1. Sexo</label>
-                <select 
-                  name="sexo" 
-                  value={formData.sexo} 
-                  onChange={handleChange}
-                  className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                  required
-                >
+                <select name="sexo" value={formData.sexo} onChange={handleChange} className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-200 outline-none" required>
                   <option value="">Seleccionar</option>
                   <option value="1">Hombre</option>
                   <option value="2">Mujer</option>
                 </select>
               </div>
-
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">2. Edad</label>
-                <input 
-                  type="number" 
-                  name="edad" 
-                  value={formData.edad} 
-                  onChange={handleChange}
-                  placeholder="Ej: 21"
-                  className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                  required 
-                />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">2. Edad (años cumplidos)</label>
+                <input type="number" name="edad" value={formData.edad} onChange={handleChange} placeholder="Ej: 21" className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-200 outline-none" required />
               </div>
             </div>
 
-            {/* Estrato */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">3. Estrato socioeconómico</label>
-              <input 
-                type="number" 
-                name="estrato" 
-                value={formData.estrato} 
-                onChange={handleChange}
-                min="1" 
-                max="6"
-                placeholder="1 - 6"
-                className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                required 
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">3. Estrato socioeconómico</label>
+                <select name="estrato" value={formData.estrato} onChange={handleChange} className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-200 outline-none" required>
+                  <option value="">Seleccionar</option>
+                  {[1, 2, 3, 4, 5, 6].map(num => <option key={num} value={num}>{num}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">4. Estado Civil</label>
+                <select name="estado_civil" value={formData.estado_civil} onChange={handleChange} className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-200 outline-none" required>
+                  <option value="">Seleccionar</option>
+                  <option value="1">Soltero/a</option>
+                  <option value="2">Casado/a</option>
+                  <option value="3">Unión Libre</option>
+                  <option value="4">Separado/a / Divorciado/a</option>
+                  <option value="5">Viudo/a</option>
+                </select>
+              </div>
             </div>
 
-            {/* Estado Civil */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">4. Estado Civil</label>
-              <select 
-                name="estadoCivil" 
-                value={formData.estadoCivil} 
-                onChange={handleChange}
-                className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                required
-              >
-                <option value="">Seleccionar</option>
-                <option value="1">Soltero/a</option>
-                <option value="2">Casado/a</option>
-                <option value="3">Unión Libre</option>
-                <option value="4">Separado/a</option>
-                <option value="5">Viudo/a</option>
-              </select>
-            </div>
-
-            {/* Hijos */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">5. ¿Tienes hijos?</label>
-                <select 
-                  name="tieneHijos" 
-                  value={formData.tieneHijos} 
-                  onChange={handleChange}
-                  className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                  required
-                >
+                <select name="tiene_hijos" value={formData.tiene_hijos} onChange={handleChange} className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-200 outline-none" required>
                   <option value="">Seleccionar</option>
                   <option value="1">Sí</option>
                   <option value="2">No</option>
                 </select>
               </div>
-
-              {formData.tieneHijos === '1' && (
+              {formData.tiene_hijos === '1' && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">6. ¿Cuántos hijos?</label>
-                  <select 
-                    name="numeroHijos" 
-                    value={formData.numeroHijos} 
-                    onChange={handleChange}
-                    className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                    required
-                  >
+                  <select name="numero_hijos" value={formData.numero_hijos} onChange={handleChange} className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-200 outline-none" required>
                     <option value="">Seleccionar</option>
                     <option value="1">Uno</option>
                     <option value="2">Dos</option>
@@ -173,110 +188,50 @@ const EncuestaDemografica: React.FC = () => {
               )}
             </div>
 
-            {/* Universidad y Carrera */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">7. Universidad</label>
-                <input 
-                  type="text" 
-                  name="universidad" 
-                  value={formData.universidad} 
-                  onChange={handleChange}
-                  placeholder="Nombre de tu universidad"
-                  className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                  required 
-                />
+                <input type="text" name="universidad" value={formData.universidad} onChange={handleChange} placeholder="Nombre de tu universidad" className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-200" required />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">8. Carrera</label>
-                <input 
-                  type="text" 
-                  name="carrera" 
-                  value={formData.carrera} 
-                  onChange={handleChange}
-                  placeholder="Ej: Psicología, Ingeniería..."
-                  className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                  required 
-                />
+                <input type="text" name="carrera" value={formData.carrera} onChange={handleChange} placeholder="Ej: Psicología" className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-200" required />
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-1">
+              <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">9. Semestre</label>
-                <input 
-                  type="text" 
-                  name="semestre" 
-                  value={formData.semestre} 
-                  onChange={handleChange}
-                  placeholder="5to"
-                  className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                  required 
-                />
+                <input type="number" name="semestre" value={formData.semestre} onChange={handleChange} className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none" required />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Créditos</label>
-                <input 
-                  type="number" 
-                  name="creditos" 
-                  value={formData.creditos} 
-                  onChange={handleChange}
-                  className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">10. Créditos matriculados</label>
+                <input type="number" name="creditos" value={formData.creditos} onChange={handleChange} className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none" required />
               </div>
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Materias</label>
-                <input 
-                  type="number" 
-                  name="materias" 
-                  value={formData.materias} 
-                  onChange={handleChange}
-                  className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                />
+                <label className="block text-sm font-semibold text-gray-700 mb-2">11. Materias matriculadas</label>
+                <input type="number" name="materias" value={formData.materias} onChange={handleChange} className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none" required />
               </div>
             </div>
 
-            {/* Promedio */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">11. Promedio Acumulado</label>
-              <input 
-                type="text" 
-                name="promedioAcumulado" 
-                value={formData.promedioAcumulado} 
-                onChange={handleChange}
-                placeholder="Ej: 4.35"
-                className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                required 
-              />
+              <label className="block text-sm font-semibold text-gray-700 mb-2">12. Promedio Acumulado</label>
+              <input type="number" step="0.1" name="promedio_acumulado" value={formData.promedio_acumulado} onChange={handleChange} placeholder="Ej: 4.2" className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-200" required />
             </div>
 
-            {/* Trabajo */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">12. ¿Trabajas actualmente?</label>
-                <select 
-                  name="trabajaActual" 
-                  value={formData.trabajaActual} 
-                  onChange={handleChange}
-                  className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                  required
-                >
+                <label className="block text-sm font-semibold text-gray-700 mb-2">13. ¿Trabajas actualmente?</label>
+                <select name="trabaja_actual" value={formData.trabaja_actual} onChange={handleChange} className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-200 outline-none" required>
                   <option value="">Seleccionar</option>
                   <option value="1">Sí</option>
                   <option value="2">No</option>
                 </select>
               </div>
-
-              {formData.trabajaActual === '1' && (
+              {formData.trabaja_actual === '1' && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">13. Tipo de vinculación</label>
-                  <select 
-                    name="tipoVinculacion" 
-                    value={formData.tipoVinculacion} 
-                    onChange={handleChange}
-                    className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                    required
-                  >
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">14. Tipo de vinculación</label>
+                  <select name="tipo_vinculacion" value={formData.tipo_vinculacion} onChange={handleChange} className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-200" required>
                     <option value="">Seleccionar</option>
                     <option value="1">Fines de semana</option>
                     <option value="2">Por horas</option>
@@ -287,16 +242,9 @@ const EncuestaDemografica: React.FC = () => {
               )}
             </div>
 
-            {/* Condición Permanente */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">14. ¿Tienes alguna condición permanente?</label>
-              <select 
-                name="condicionPermanente" 
-                value={formData.condicionPermanente} 
-                onChange={handleChange}
-                className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all"
-                required
-              >
+              <label className="block text-sm font-semibold text-gray-700 mb-2">15. ¿Tienes alguna condición permanente?</label>
+              <select name="condicion_permanente" value={formData.condicion_permanente} onChange={handleChange} className="w-full px-5 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-indigo-200 outline-none" required>
                 <option value="">Seleccionar</option>
                 <option value="1">Dificultad física y/o movilidad</option>
                 <option value="2">Mudez o dificultad en el habla</option>
@@ -306,21 +254,15 @@ const EncuestaDemografica: React.FC = () => {
               </select>
             </div>
 
-            {/* Submit Button */}
             <div className="pt-6">
-              <button
-                type="submit"
-                className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-semibold py-4 rounded-2xl text-lg shadow-lg shadow-indigo-500/30 transition-all duration-200 active:scale-[0.98]"
-              >
-                Guardar y Continuar →
+              <button type="submit" disabled={isSubmitting} className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-semibold py-4 rounded-2xl text-lg shadow-lg shadow-indigo-500/30 transition-all active:scale-[0.98] disabled:opacity-50">
+                {isSubmitting ? "Guardando progreso..." : "Guardar y Continuar →"}
               </button>
             </div>
           </form>
         </div>
 
-        <p className="text-center text-gray-500 text-sm mt-8">
-          Sección 1 de 11 • Datos Sociodemográficos
-        </p>
+        <p className="text-center text-gray-500 text-sm mt-8">Sección 1 de 11 • Datos Sociodemográficos</p>
       </div>
     </div>
   );

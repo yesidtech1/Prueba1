@@ -1,15 +1,23 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 interface FormData {
   psd1: string; psd2: string; psd3: string; psd4: string; psd5: string;
   psd6: string; psd7: string; psd8: string; psd9: string; psd10: string;
   psd11: string; psd12: string; psd13: string; psd14: string; psd15: string;
   psd16: string; psd17: string; psd18: string; psd19: string; psd20: string;
+  [key: string]: string;
 }
 
+const supabase = createClient();
+
 const EncuestaSintomasDepresivos: React.FC = () => {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
   const [formData, setFormData] = useState<FormData>({
     psd1: '', psd2: '', psd3: '', psd4: '', psd5: '',
     psd6: '', psd7: '', psd8: '', psd9: '', psd10: '',
@@ -17,22 +25,74 @@ const EncuestaSintomasDepresivos: React.FC = () => {
     psd16: '', psd17: '', psd18: '', psd19: '', psd20: '',
   });
 
-  const [loading, setLoading] = useState(false);
+  // --- LÓGICA DE RECUPERACIÓN DE PROGRESO ---
+  useEffect(() => {
+    const checkProgress = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      const { data } = await supabase
+        .from('encuestas')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (data) {
+        const savedData: any = {};
+        Object.keys(formData).forEach(key => {
+          const dbKey = key.toLowerCase();
+          if (data[dbKey]) savedData[key] = String(data[dbKey]);
+        });
+        setFormData(prev => ({ ...prev, ...savedData }));
+      }
+      
+      setIsChecking(false);
+    };
+
+    checkProgress();
+  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    setTimeout(() => {
-      console.log('Datos Síntomas Depresivos:', formData);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No hay sesión de usuario");
+
+      // Normalizamos las llaves a minúsculas para la base de datos
+      const dataToSave = Object.keys(formData).reduce((acc, key) => {
+        acc[key.toLowerCase()] = formData[key];
+        return acc;
+      }, {} as any);
+
+      const { error } = await supabase
+        .from('encuestas')
+        .upsert({
+          user_id: user.id,
+          ...dataToSave,
+          current_step: 6, // Marcamos que la siguiente es la 6
+          updated_at: new Date(),
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      router.push('/auth/formulario-6');
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+      console.error('Error al guardar:', errorMessage);
+      alert('Hubo un problema al guardar tus respuestas.');
+    } finally {
       setLoading(false);
-      alert('¡Sección de Síntomas Depresivos guardada correctamente! 🎉');
-    }, 1000);
+    }
   };
 
   const depressionOptions = [
@@ -65,10 +125,17 @@ const EncuestaSintomasDepresivos: React.FC = () => {
     { id: 'psd20', text: 'Me gustan las mismas cosas que habitualmente me agradaban.' },
   ];
 
+  if (isChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
       <div className="max-w-4xl mx-auto">
-        
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-md mb-4">
             <div className="w-10 h-10 bg-amber-600 rounded-xl flex items-center justify-center text-white text-2xl">😔</div>
@@ -78,6 +145,9 @@ const EncuestaSintomasDepresivos: React.FC = () => {
         </div>
 
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
+          <div className="w-full bg-gray-100 h-2">
+            <div className="bg-amber-600 h-2 w-[45%] transition-all duration-500"></div>
+          </div>
           <div className="bg-gradient-to-r from-amber-600 to-orange-600 px-8 py-6">
             <h2 className="text-white text-2xl font-semibold">5. Síntomas Depresivos (PSD)</h2>
             <p className="text-amber-100 mt-1">Según cómo te has sentido en las últimas dos semanas</p>
@@ -89,13 +159,12 @@ const EncuestaSintomasDepresivos: React.FC = () => {
                 <p className="text-lg font-medium text-gray-800 mb-6 leading-relaxed">
                   {index + 1}. {q.text}
                 </p>
-                
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {depressionOptions.map((option) => (
                     <label
                       key={option.value}
                       className={`flex flex-col items-center justify-center p-6 rounded-2xl border-2 cursor-pointer transition-all hover:scale-105 text-center min-h-[110px] ${
-                        formData[q.id as keyof FormData] === option.value
+                        formData[q.id] === option.value
                           ? 'border-amber-600 bg-amber-50 shadow-sm'
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
@@ -104,9 +173,10 @@ const EncuestaSintomasDepresivos: React.FC = () => {
                         type="radio"
                         name={q.id}
                         value={option.value}
-                        checked={formData[q.id as keyof FormData] === option.value}
+                        checked={formData[q.id] === option.value}
                         onChange={handleChange}
                         className="hidden"
+                        required
                       />
                       <div className="font-bold text-2xl text-gray-700 mb-1">{option.value}</div>
                       <div className="text-sm text-gray-600 leading-tight text-center">{option.label}</div>
@@ -116,7 +186,6 @@ const EncuestaSintomasDepresivos: React.FC = () => {
               </div>
             ))}
 
-            {/* Submit Button */}
             <div className="pt-8">
               <button
                 type="submit"
@@ -128,10 +197,6 @@ const EncuestaSintomasDepresivos: React.FC = () => {
             </div>
           </form>
         </div>
-
-        <p className="text-center text-gray-500 text-sm mt-8">
-          Sección 5 de 11 • Síntomas Depresivos
-        </p>
       </div>
     </div>
   );

@@ -1,36 +1,90 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 interface FormData {
   eplut1: string; eplut2: string; eplut3: string; eplut4: string; eplut5: string;
   eplut6: string; eplut7: string; eplut8: string; eplut9: string; eplut10: string;
   eplut11: string; eplut12: string; eplut13: string; eplut14: string; eplut15: string;
+  [key: string]: string;
 }
 
+const supabase = createClient();
+
 const EncuestaPlutchick: React.FC = () => {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
   const [formData, setFormData] = useState<FormData>({
     eplut1: '', eplut2: '', eplut3: '', eplut4: '', eplut5: '',
     eplut6: '', eplut7: '', eplut8: '', eplut9: '', eplut10: '',
     eplut11: '', eplut12: '', eplut13: '', eplut14: '', eplut15: '',
   });
 
-  const [loading, setLoading] = useState(false);
+  // --- LÓGICA DE RECUPERACIÓN ---
+  useEffect(() => {
+    const checkProgress = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return router.push('/login');
+
+      const { data } = await supabase
+        .from('encuestas')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (data) {
+        const savedData: any = {};
+        Object.keys(formData).forEach(key => {
+          const dbKey = key.toLowerCase();
+          if (data[dbKey]) savedData[key] = String(data[dbKey]);
+        });
+        setFormData(prev => ({ ...prev, ...savedData }));
+      }
+      setIsChecking(false);
+    };
+    checkProgress();
+  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    setTimeout(() => {
-      console.log('Datos Escala de Plutchick:', formData);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No hay sesión de usuario");
+
+      const dataToSave = Object.keys(formData).reduce((acc, key) => {
+        acc[key.toLowerCase()] = formData[key];
+        return acc;
+      }, {} as any);
+
+      const { error } = await supabase
+        .from('encuestas')
+        .upsert({
+          user_id: user.id,
+          ...dataToSave,
+          current_step: 7, // Siguiente paso
+          updated_at: new Date(),
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      router.push('/auth/formulario-7');
+
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Error desconocido";
+      console.error('Error al guardar:', errorMessage);
+      alert('Hubo un problema al guardar tus respuestas.');
+    } finally {
       setLoading(false);
-      alert('¡Escala de Plutchick guardada correctamente! 🎉');
-    }, 1000);
+    }
   };
 
   const questions = [
@@ -51,10 +105,17 @@ const EncuestaPlutchick: React.FC = () => {
     { id: 'eplut15', text: '¿Ha intentado alguna vez quitarse la vida?' },
   ];
 
+  if (isChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-red-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
       <div className="max-w-4xl mx-auto">
-        
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-md mb-4">
             <div className="w-10 h-10 bg-red-600 rounded-xl flex items-center justify-center text-white text-2xl">⚠️</div>
@@ -64,6 +125,9 @@ const EncuestaPlutchick: React.FC = () => {
         </div>
 
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden">
+          <div className="w-full bg-gray-100 h-2">
+            <div className="bg-red-600 h-2 w-[54%] transition-all duration-500"></div>
+          </div>
           <div className="bg-gradient-to-r from-red-600 to-rose-600 px-8 py-6">
             <h2 className="text-white text-2xl font-semibold">6. Escala de Plutchick</h2>
             <p className="text-rose-100 mt-1">Responda Sí o No según corresponda</p>
@@ -75,44 +139,23 @@ const EncuestaPlutchick: React.FC = () => {
                 <p className="flex-1 text-lg text-gray-800 leading-relaxed">
                   {index + 1}. {q.text}
                 </p>
-                
                 <div className="flex gap-4">
                   <label className={`flex-1 md:flex-none px-8 py-4 rounded-2xl border-2 cursor-pointer transition-all text-center font-medium ${
-                    formData[q.id as keyof FormData] === '1'
-                      ? 'border-red-600 bg-red-50 text-red-700'
-                      : 'border-gray-200 hover:border-gray-300'
+                    formData[q.id] === '1' ? 'border-red-600 bg-red-50 text-red-700' : 'border-gray-200 hover:border-gray-300'
                   }`}>
-                    <input
-                      type="radio"
-                      name={q.id}
-                      value="1"
-                      checked={formData[q.id as keyof FormData] === '1'}
-                      onChange={handleChange}
-                      className="hidden"
-                    />
+                    <input type="radio" name={q.id} value="1" checked={formData[q.id] === '1'} onChange={handleChange} className="hidden" required />
                     Sí
                   </label>
-
                   <label className={`flex-1 md:flex-none px-8 py-4 rounded-2xl border-2 cursor-pointer transition-all text-center font-medium ${
-                    formData[q.id as keyof FormData] === '2'
-                      ? 'border-emerald-600 bg-emerald-50 text-emerald-700'
-                      : 'border-gray-200 hover:border-gray-300'
+                    formData[q.id] === '2' ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-gray-200 hover:border-gray-300'
                   }`}>
-                    <input
-                      type="radio"
-                      name={q.id}
-                      value="2"
-                      checked={formData[q.id as keyof FormData] === '2'}
-                      onChange={handleChange}
-                      className="hidden"
-                    />
+                    <input type="radio" name={q.id} value="2" checked={formData[q.id] === '2'} onChange={handleChange} className="hidden" />
                     No
                   </label>
                 </div>
               </div>
             ))}
 
-            {/* Submit Button */}
             <div className="pt-8">
               <button
                 type="submit"
@@ -124,10 +167,6 @@ const EncuestaPlutchick: React.FC = () => {
             </div>
           </form>
         </div>
-
-        <p className="text-center text-gray-500 text-sm mt-8">
-          Sección 6 de 11 • Escala de Plutchick
-        </p>
       </div>
     </div>
   );

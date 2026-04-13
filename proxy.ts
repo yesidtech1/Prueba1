@@ -29,10 +29,18 @@ export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // 🔓 Rutas públicas (NO requieren login)
+  const authRoutes = [
+    "/auth/login",
+    "/auth/sign-up",
+  ];
+
+  const isAuthPage = authRoutes.includes(pathname);
+
   const publicRoutes = [
     "/auth/login",
     "/auth/sign-up",
     "/auth/callback",
+    "/auth/forgot-password",
   ];
 
   const isPublic = publicRoutes.some((route) =>
@@ -45,9 +53,18 @@ export async function proxy(req: NextRequest) {
   }
 
   // 🔁 Si está logueado y entra a login → lo mandas al dashboard
-  if (user && pathname.startsWith("/auth")) {
-    return NextResponse.redirect(new URL("/auth/sign-success", req.url));
+//   if (user && pathname.startsWith("/auth")) {
+//   const isGoingToSuccess = pathname === "/auth/sign-up-success";
+//   const isGoingToForgotPassword = pathname === "/auth/forgot-password";
+
+//   if (!isGoingToSuccess && !isGoingToForgotPassword) {
+//     return NextResponse.redirect(new URL("/auth/sign-up-success", req.url));
+//   }
+// }
+  if (user && isAuthPage) {
+    return NextResponse.redirect(new URL("/auth/sign-up-success", req.url));
   }
+
 
   return res;
 }

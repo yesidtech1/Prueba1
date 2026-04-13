@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
 interface FormData {
   pcsM1: string; pcsM2: string; pcsM3: string; pcsM4: string; pcsM5: string;
@@ -11,9 +13,15 @@ interface FormData {
   pcsM26: string; pcsM27: string; pcsM28: string; pcsM29: string; pcsM30: string;
   pcsM31: string; pcsM32: string; pcsM33: string; pcsM34: string; pcsM35: string;
   pcsM36: string; pcsM37: string; pcsM38: string; pcsM39: string;
+  [key: string]: string;
 }
 
+const supabase = createClient();
+
 const EncuestaSaludMental: React.FC = () => {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
   const [formData, setFormData] = useState<FormData>({
     pcsM1: '', pcsM2: '', pcsM3: '', pcsM4: '', pcsM5: '',
     pcsM6: '', pcsM7: '', pcsM8: '', pcsM9: '', pcsM10: '',
@@ -25,22 +33,74 @@ const EncuestaSaludMental: React.FC = () => {
     pcsM36: '', pcsM37: '', pcsM38: '', pcsM39: '',
   });
 
-  const [loading, setLoading] = useState(false);
+  // --- LÓGICA DE RECUPERACIÓN DE PROGRESO ---
+  useEffect(() => {
+    const checkProgress = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+
+      const { data } = await supabase
+        .from('encuestas')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (data) {
+        const savedData: any = {};
+        Object.keys(formData).forEach(key => {
+          // Supabase devuelve las columnas en minúsculas, por eso usamos toLowerCase()
+          const dbKey = key.toLowerCase();
+          if (data[dbKey]) savedData[key] = String(data[dbKey]);
+        });
+        setFormData(prev => ({ ...prev, ...savedData }));
+      }
+      
+      setIsChecking(false);
+    };
+
+    checkProgress();
+  }, [router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    setTimeout(() => {
-      console.log('Datos de Salud Mental:', formData);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("No hay sesión de usuario");
+
+      // Convertimos las keys a minúsculas para asegurar compatibilidad con la DB
+      const dataToSave = Object.keys(formData).reduce((acc, key) => {
+        acc[key] = formData[key];
+        return acc;
+      }, {} as any);
+
+      const { error } = await supabase
+        .from('encuestas')
+        .upsert({
+          user_id: user.id,
+          ...dataToSave,
+          current_step: 4, // 👈 Marcamos que la siguiente es la 4 (Zung)
+          updated_at: new Date(),
+        }, { onConflict: 'user_id' });
+
+      if (error) throw error;
+      router.push('/auth/formulario-4');
+
+    } catch (error: any) {
+      console.error('Error al guardar:', error.message);
+      alert('Hubo un problema al guardar tus respuestas.');
+    } finally {
       setLoading(false);
-      alert('¡Sección de Salud Mental guardada correctamente! 🎉');
-    }, 1000);
+    }
   };
 
   const scaleOptions = [
@@ -92,10 +152,17 @@ const EncuestaSaludMental: React.FC = () => {
     { id: 'pcsM39', text: 'Me siento insatisfecha/o de mi aspecto físico.' },
   ];
 
+  if (isChecking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4">
       <div className="max-w-4xl mx-auto">
-        
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-3 bg-white px-6 py-3 rounded-2xl shadow-md mb-4">
             <div className="w-10 h-10 bg-teal-600 rounded-xl flex items-center justify-center text-white text-2xl">🧠</div>
@@ -116,13 +183,12 @@ const EncuestaSaludMental: React.FC = () => {
                 <p className="text-lg font-medium text-gray-800 mb-6 leading-relaxed">
                   {index + 1}. {q.text}
                 </p>
-                
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {scaleOptions.map((option) => (
                     <label
                       key={option.value}
                       className={`flex items-center justify-center p-5 rounded-2xl border-2 cursor-pointer transition-all hover:scale-105 text-center ${
-                        formData[q.id as keyof FormData] === option.value
+                        formData[q.id] === option.value
                           ? 'border-teal-600 bg-teal-50'
                           : 'border-gray-200 hover:border-gray-300'
                       }`}
@@ -131,9 +197,10 @@ const EncuestaSaludMental: React.FC = () => {
                         type="radio"
                         name={q.id}
                         value={option.value}
-                        checked={formData[q.id as keyof FormData] === option.value}
+                        checked={formData[q.id] === option.value}
                         onChange={handleChange}
                         className="hidden"
+                        required
                       />
                       <div>
                         <div className="font-bold text-xl text-gray-700">{option.value}</div>
@@ -145,7 +212,6 @@ const EncuestaSaludMental: React.FC = () => {
               </div>
             ))}
 
-            {/* Submit Button */}
             <div className="pt-8">
               <button
                 type="submit"
@@ -157,10 +223,6 @@ const EncuestaSaludMental: React.FC = () => {
             </div>
           </form>
         </div>
-
-        <p className="text-center text-gray-500 text-sm mt-8">
-          Sección 3 de 11 • Salud Mental (PCSM)
-        </p>
       </div>
     </div>
   );
