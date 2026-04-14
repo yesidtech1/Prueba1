@@ -1,8 +1,9 @@
-'use client';
+"use client";
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { Home, LogOut } from "lucide-react"; // Importamos iconos
 
 const supabase = createClient();
 
@@ -13,7 +14,6 @@ export default function FormLayout({ children }: { children: React.ReactNode }) 
   const [maxStep, setMaxStep] = useState<number>(0);
   const [loading, setLoading] = useState(true);
 
-  // Extraemos el número del formulario actual de la URL
   const currentStep = parseInt(pathname.split('-').pop() || '0');
 
   useEffect(() => {
@@ -27,7 +27,6 @@ export default function FormLayout({ children }: { children: React.ReactNode }) 
           .single();
         
         if (data) {
-          // Si ya terminó todo, el maxStep es 11, si no, es el current_step guardado
           setMaxStep(data.is_completed ? 11 : data.current_step);
         }
       }
@@ -44,34 +43,43 @@ export default function FormLayout({ children }: { children: React.ReactNode }) 
   const prevRoute = `/auth/formularios/formulario-${currentStep - 1}`;
   const nextRoute = `/auth/formularios/formulario-${currentStep + 1}`;
 
-  // Lógica para habilitar el botón "Siguiente"
   const canGoForward = currentStep < maxStep;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       
-      {/* HEADER / NAVBAR CON BOTÓN LOGOUT */}
+      {/* HEADER / NAVBAR */}
       <nav className="bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center sticky top-0 z-40">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
-            E
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+              E
+            </div>
+            <span className="font-bold text-gray-700 hidden sm:inline">Encuesta de Salud</span>
           </div>
-          <span className="font-bold text-gray-700 hidden sm:inline">Encuesta de Salud</span>
+
+          {/* ✅ BOTÓN VOLVER AL INICIO */}
+          <div className="h-6 w-[1px] bg-gray-200 hidden sm:block" /> {/* Separador visual */}
+          <button
+            onClick={() => router.push('/')}
+            className="flex items-center gap-2 text-gray-500 hover:text-indigo-600 font-medium transition-colors px-3 py-1.5 rounded-lg hover:bg-indigo-50"
+          >
+            <Home className="h-4 w-4" />
+            <span className="text-sm hidden md:inline">Inicio</span>
+          </button>
         </div>
 
         <button
           onClick={handleLogout}
-          className="flex items-center gap-2 text-gray-500 hover:text-red-600 font-medium transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50"
+          className="flex items-center gap-2 text-gray-400 hover:text-red-600 font-medium transition-colors px-3 py-1.5 rounded-lg hover:bg-red-50"
         >
-          <span>Cerrar Sesión</span>
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
+          <span className="text-sm">Cerrar Sesión</span>
+          <LogOut className="h-4 w-4" />
         </button>
       </nav>
 
       {/* CONTENIDO PRINCIPAL */}
-      <main className="flex-grow py-10">
+      <main className="flex-grow py-10 mb-20"> {/* mb-20 para que el contenido no quede oculto tras la barra inferior */}
         {children}
       </main>
 

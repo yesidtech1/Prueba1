@@ -91,7 +91,7 @@ const EncuestaPercepcionTabaco: React.FC = () => {
         }, { onConflict: 'user_id' });
 
       if (error) throw error;
-      router.push('/dashboard?finish=true');
+      router.push('/auth/dashboard');
 
     } catch (error: any) {
       alert('Error al finalizar: ' + error.message);
