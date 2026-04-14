@@ -116,7 +116,7 @@ const EncuestaSaludMental: React.FC = () => {
       };
 
       Object.keys(formData).forEach(key => {
-        dataToSave[key.toLowerCase()] = formData[key];
+        dataToSave[key] = formData[key];
       });
 
       const { error } = await supabase.from('encuestas').upsert(dataToSave, { onConflict: 'user_id' });
