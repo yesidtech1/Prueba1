@@ -75,7 +75,7 @@ const EncuestaSaludMental: React.FC = () => {
       if (data) {
         const savedData: any = {};
         questions.forEach(q => {
-          const valueFromDB = data[q.id.toLowerCase()];
+          const valueFromDB = data[q.id];
           if (valueFromDB !== undefined && valueFromDB !== null) {
             savedData[q.id] = String(valueFromDB);
           }
