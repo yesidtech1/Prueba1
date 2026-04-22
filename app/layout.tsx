@@ -1,3 +1,4 @@
+// app/layout.tsx
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { ThemeProvider } from "next-themes";
@@ -9,8 +10,8 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "Next.js and Supabase Starter Kit",
-  description: "The fastest way to build apps with Next.js and Supabase",
+  title: "SaludVital",
+  description: "Tu plataforma de exámenes médicos digitales",
 };
 
 const geistSans = Geist({
@@ -25,14 +26,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${geistSans.className} antialiased`}>
+    <html lang="es" suppressHydrationWarning>
+      <body className={`${geistSans.className} antialiased bg-slate-50 dark:bg-gray-950`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
           enableSystem
           disableTransitionOnChange
         >
+          {/* Quitamos el Navbar de aquí para que no sea global */}
           {children}
         </ThemeProvider>
       </body>

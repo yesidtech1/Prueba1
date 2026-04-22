@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 
 interface FormData {
   ptabaco1: string; ptabaco2: string; ptabaco3: string; ptabaco4: string; ptabaco5: string;
@@ -14,7 +14,7 @@ interface FormData {
   [key: string]: any;
 }
 
-const supabase = createClient();
+// const supabase = createClient();
 
 const EncuestaPercepcionTabaco: React.FC = () => {
   const router = useRouter();

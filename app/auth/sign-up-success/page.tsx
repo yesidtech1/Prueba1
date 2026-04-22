@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2, Home, RotateCcw } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabase/client";
 
-const supabase = createClient();
+// const supabase = createClient();
 
 export default function SignUpSuccessPage() {
   const router = useRouter();

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { 
   Activity, 
@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { calcularIPA, getRiesgoIPA } from "@/lib/calculos";
 
-const supabase = createClient();
+// const supabase = createClient();
 
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null);

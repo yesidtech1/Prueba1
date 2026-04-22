@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { Home, LogOut } from "lucide-react"; // Importamos iconos
 
-const supabase = createClient();
+// const supabase = createClient();
 
 export default function FormLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -37,7 +37,7 @@ export default function FormLayout({ children }: { children: React.ReactNode }) 
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push('/login');
+    router.push('/auth/login');
   };
 
   const prevRoute = `/auth/formularios/formulario-${currentStep - 1}`;

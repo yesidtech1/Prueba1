@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 
 interface FormData {
   psd1: string; psd2: string; psd3: string; psd4: string; psd5: string;
@@ -12,7 +12,7 @@ interface FormData {
   [key: string]: string;
 }
 
-const supabase = createClient();
+// const supabase = createClient();
 
 const EncuestaSintomasDepresivos: React.FC = () => {
   const router = useRouter();

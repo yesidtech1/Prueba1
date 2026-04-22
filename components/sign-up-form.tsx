@@ -3,9 +3,17 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { 
+  ArrowLeft, 
+  User, 
+  Mail, 
+  Lock,  
+  AlertCircle, 
+  Loader2 
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -29,8 +37,6 @@ export function SignUpForm({
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
   const router = useRouter();
-  const supabase = createClient();
-
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -54,20 +60,8 @@ export function SignUpForm({
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (formData.password !== formData.repeatPassword) {
       setError("Las contraseñas no coinciden");
-      return;
-    }
-
-    if (
-      !formData.firstName ||
-      !formData.lastName ||
-      !formData.documentType ||
-      !formData.documentNumber ||
-      !formData.email 
-    ) {
-      setError("Por favor completa todos los campos obligatorios");
       return;
     }
 
@@ -75,7 +69,6 @@ export function SignUpForm({
     setError(null);
 
     try {
-      // 🔐 Registro con email
       const { data, error: signUpError } = await supabase.auth.signUp({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
@@ -91,165 +84,139 @@ export function SignUpForm({
 
       if (signUpError) throw signUpError;
 
-      // 📦 Guardar perfil
       if (data.user) {
-        const { error: profileError } = await supabase
-          .from("profiles")
-          .upsert(
-            {
-              id: data.user.id,
-              first_name: formData.firstName,
-              last_name: formData.lastName,
-              document_type: formData.documentType,
-              document_number: formData.documentNumber,
-              email: formData.email,
-            },
-            { onConflict: "id" }
-          );
-
-        if (profileError) {
-          console.error("Error al guardar perfil:", profileError);
-        }
+        await supabase.from("profiles").upsert({
+          id: data.user.id,
+          first_name: formData.firstName,
+          last_name: formData.lastName,
+          document_type: formData.documentType,
+          document_number: formData.documentNumber,
+          email: formData.email,
+        });
       }
-
       router.push("/auth/sign-up-success");
-
-    } catch (error: unknown) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Ocurrió un error al crear la cuenta"
-      );
+    } catch (error: any) {
+      setError(error.message || "Ocurrió un error al crear la cuenta");
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">Crear cuenta</CardTitle>
+    <div className={cn("flex flex-col gap-4 w-full max-w-md mx-auto", className)} {...props}>
+      {/* Botón Volver al Inicio */}
+      <Link 
+        href="/" 
+        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-blue-600 transition-colors w-fit mb-2 group"
+      >
+        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+        Volver al inicio
+      </Link>
+
+      <Card className="border-t-4 border-t-blue-600 shadow-lg">
+        <CardHeader className="space-y-1">
+          <CardTitle className="text-2xl font-bold tracking-tight">Crear cuenta</CardTitle>
           <CardDescription>
-            Regístrate con tu correo electrónico
+            Ingresa tus datos para unirte a SaludVital
           </CardDescription>
         </CardHeader>
 
         <CardContent>
-          <form onSubmit={handleSignUp}>
-            <div className="flex flex-col gap-6">
-
-              {/* Nombre y Apellido */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Nombre *</Label>
-                  <Input
-                    name="firstName"
-                    placeholder="Juan"
-                    value={formData.firstName}
-                    onChange={handleChange}
-                    required
-                  />
+          <form onSubmit={handleSignUp} className="space-y-5">
+            
+            {/* Sección: Identidad */}
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-blue-600 font-semibold text-sm border-b pb-1">
+                <User className="w-4 h-4" /> Datos Personales
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="firstName">Nombre</Label>
+                  <Input name="firstName" placeholder="Ej. Juan" onChange={handleChange} required />
                 </div>
-
-                <div className="grid gap-2">
-                  <Label>Apellido *</Label>
-                  <Input
-                    name="lastName"
-                    placeholder="Pérez"
-                    value={formData.lastName}
-                    onChange={handleChange}
-                    required
-                  />
+                <div className="grid gap-1.5">
+                  <Label htmlFor="lastName">Apellido</Label>
+                  <Input name="lastName" placeholder="Ej. Pérez" onChange={handleChange} required />
                 </div>
               </div>
 
-              {/* Documento */}
-              <div className="grid gap-2">
-                <Label>Tipo de documento *</Label>
-                <Select onValueChange={handleSelectChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="CC">Cédula (CC)</SelectItem>
-                    <SelectItem value="CE">Extranjería (CE)</SelectItem>
-                    <SelectItem value="PASAPORTE">Pasaporte</SelectItem>
-                    <SelectItem value="TI">Tarjeta (TI)</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid gap-1.5 sm:col-span-1">
+                  <Label>Tipo</Label>
+                  <Select onValueChange={handleSelectChange}>
+                    <SelectTrigger><SelectValue placeholder="Tipo" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="CC">C.C.</SelectItem>
+                      <SelectItem value="CE">C.E.</SelectItem>
+                      <SelectItem value="PASAPORTE">Pasaporte</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid gap-1.5 sm:col-span-2">
+                  <Label>Número de documento</Label>
+                  <Input name="documentNumber" placeholder="1000..." onChange={handleChange} required />
+                </div>
               </div>
-
-              <div className="grid gap-2">
-                <Label>Número de documento *</Label>
-                <Input
-                  name="documentNumber"
-                  placeholder="1234567890"
-                  value={formData.documentNumber}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              {/* 📧 EMAIL (principal ahora) */}
-              <div className="grid gap-2">
-                <Label>Correo *</Label>
-                <Input
-                  name="email"
-                  type="email"
-                  placeholder="tuemail@gmail.com"
-                  value={formData.email}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              {/* 🔒 Password */}
-              <div className="grid gap-2">
-                <Label>Contraseña *</Label>
-                <Input
-                  name="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label>Repetir contraseña *</Label>
-                <Input
-                  name="repeatPassword"
-                  type="password"
-                  value={formData.repeatPassword}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              {/* Error */}
-              {error && (
-                <p className="text-sm text-red-500">{error}</p>
-              )}
-
-              {/* Botón */}
-              <Button type="submit" disabled={isLoading}>
-                {isLoading ? "Creando cuenta..." : "Crear cuenta"}
-              </Button>
             </div>
 
-            {/* Login */}
-            <div className="mt-4 text-center text-sm">
-              ¿Ya tienes una cuenta?{" "}
-              <Link href="/auth/login" className="underline">
-                Iniciar sesión
+            {/* Sección: Cuenta */}
+            <div className="space-y-4 pt-2">
+              <div className="flex items-center gap-2 text-blue-600 font-semibold text-sm border-b pb-1">
+                <Lock className="w-4 h-4" /> Seguridad
+              </div>
+              
+              <div className="grid gap-1.5">
+                <Label htmlFor="email">Correo electrónico</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input name="email" type="email" className="pl-9" placeholder="nombre@ejemplo.com" onChange={handleChange} required />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-1.5">
+                  <Label>Contraseña</Label>
+                  <Input name="password" type="password" onChange={handleChange} required />
+                </div>
+                <div className="grid gap-1.5">
+                  <Label>Repetir</Label>
+                  <Input name="repeatPassword" type="password" onChange={handleChange} required />
+                </div>
+              </div>
+            </div>
+
+            {error && (
+              <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm flex items-center gap-2 animate-in fade-in zoom-in duration-300">
+                <AlertCircle className="w-4 h-4" />
+                {error}
+              </div>
+            )}
+
+            <Button 
+              type="submit" 
+              className="w-full bg-blue-600 hover:bg-blue-700 h-11 text-base font-bold shadow-md shadow-blue-200 transition-all active:scale-[0.98]" 
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Procesando...
+                </>
+              ) : (
+                "Crear mi cuenta"
+              )}
+            </Button>
+
+            <div className="text-center text-sm text-muted-foreground">
+              ¿Ya tienes cuenta?{" "}
+              <Link href="/auth/login" className="text-blue-600 font-bold hover:underline underline-offset-4">
+                Inicia sesión aquí
               </Link>
             </div>
-
           </form>
         </CardContent>
       </Card>
     </div>
   );
 }
-
